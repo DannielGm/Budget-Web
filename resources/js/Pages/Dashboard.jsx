@@ -6,15 +6,77 @@ import BudgetGraph from '@/Components/Budget/BudgetGraph';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
-import { ChevronDown, Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard } from 'lucide-react';
+import CategoryForm from '@/Components/Budget/CategoryForm';
+import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
+import Dropdown from '@/Components/Dropdown';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+const MONTH_SHORT = [
+    'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+    'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
+];
+
+/**
+ * Port of the Kotlin BudgetScreen's filtering rules:
+ *  - null dateFilter  -> every expense
+ *  - rangeDays >= 30  -> the whole month
+ *  - rangeDays <= 1   -> only the same local day
+ *  - otherwise        -> the last N days, clamped to the 1st of the month
+ */
+export function filteredCategories(budget, dateFilter, rangeDays) {
+    if (dateFilter === null || dateFilter === undefined) {
+        return budget.categories;
+    }
+
+    if (rangeDays >= 30) {
+        return budget.categories;
+    }
+
+    if (rangeDays <= 1) {
+        return budget.categories
+            .map((category) => ({
+                ...category,
+                expenses: budget.expenses.filter(
+                    (e) => e.category_name === category.name && sameDay(e.timestamp, dateFilter),
+                ),
+            }))
+            .filter((c) => c.expenses.length > 0);
+    }
+
+    const end = new Date(`${dateFilter}T23:59:59`);
+    const start = new Date(end);
+    start.setDate(end.getDate() - (rangeDays - 1));
+    const floor = new Date(`${dateFilter.slice(0, 7)}-01T00:00:00`);
+    if (start < floor) start.setTime(floor.getTime());
+
+    return budget.categories
+        .map((category) => ({
+            ...category,
+            expenses: budget.expenses.filter((e) => {
+                const t = new Date(e.timestamp);
+                return e.category_name === category.name && t >= start && t <= end;
+            }),
+        }))
+        .filter((c) => c.expenses.length > 0);
+}
+
+function sameDay(timestampMs, dateIso) {
+    const d = new Date(timestampMs);
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    return iso === dateIso;
+}
+
 export default function Dashboard() {
-    const { budget, monthIds, version, auth } = usePage().props;
+    const {
+        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate,
+    } = usePage().props;
+
     const [isDark, setIsDark] = useState(false);
     const [selectedCategoryName, setSelectedCategoryName] = useState(budget.categories[0]?.name);
-    const [showMonthMenu, setShowMonthMenu] = useState(false);
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [rangeMode, setRangeMode] = useState('Mes');
 
     // Modal states
     const [showExpenseModal, setShowExpenseModal] = useState(false);
@@ -22,13 +84,52 @@ export default function Dashboard() {
     const [showBudgetModal, setShowBudgetModal] = useState(false);
     const [showDebtModal, setShowDebtModal] = useState(false);
     const [editingDebt, setEditingDebt] = useState(null);
+    const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [editingCategory, setEditingCategory] = useState(null);
 
     const toggleTheme = () => {
         setIsDark(!isDark);
         document.documentElement.classList.toggle('dark');
     };
 
-    const selectedCategory = budget.categories.find(c => c.name === selectedCategoryName);
+    // ---- Month / day navigation -------------------------------------------
+    const navigate = (monthId, dayIso) => {
+        const query = { month: monthId };
+        if (dayIso) query.day = dayIso;
+
+        router.get(route('dashboard'), query, { preserveState: true, preserveScroll: true });
+    };
+
+    const goToToday = () => {
+        setRangeMode('Mes');
+        navigate(currentMonthId, null);
+    };
+
+    // "Mes" clears the day filter (Kotlin rule); 1d/7d keep it.
+    const applyRangeMode = (mode) => {
+        setRangeMode(mode);
+        if (mode === 'Mes' && dateFilter) {
+            navigate(budget.month_id, null);
+        }
+    };
+
+    const rangeDaysFor = (mode) => (mode === 'Mes' ? 30 : mode === '7d' ? 7 : 1);
+
+    const visibleCategories = filteredCategories(budget, dateFilter, rangeDaysFor(rangeMode));
+
+    const selectedCategory = visibleCategories.find((c) => c.name === selectedCategoryName)
+        ?? budget.categories.find((c) => c.name === selectedCategoryName);
+
+    const isNotToday = dateFilter !== null || budget.month_id !== currentMonthId;
+
+    const monthLabelShort = budget.month_label.replace(/\s+\d{4}$/, '');
+    const headerLabel = dateFilter
+        ? `${monthLabelShort} - ${Number(dateFilter.slice(8, 10))}`
+        : monthLabelShort;
+
+    const dayFilterCaption = dateFilter
+        ? `${rangeMode === '1d' ? 'Día' : rangeMode === '7d' ? '7d' : 'Mes'} hasta ${Number(dateFilter.slice(8, 10))} ${MONTH_SHORT[Number(dateFilter.slice(5, 7)) - 1]}`
+        : null;
 
     const handleAddExpense = () => {
         setEditingExpense(null);
@@ -61,30 +162,105 @@ export default function Dashboard() {
         <AuthenticatedLayout
             header={
                 <div className="flex justify-between items-center w-full px-4 sm:px-0">
-                    <div className="flex items-center gap-2 cursor-pointer" onClick={() => setShowMonthMenu(!showMonthMenu)}>
-                        <h2 className="text-3xl font-black font-serif text-white uppercase tracking-tight">
-                            {budget.month_label}
-                        </h2>
-                        <ChevronDown className="text-white" size={24} />
+                    <div className="flex items-center gap-2">
+                        {isNotToday && (
+                            <button
+                                onClick={goToToday}
+                                title="Ir a hoy"
+                                className="p-2 text-white hover:bg-white/10 rounded-full transition-all"
+                            >
+                                <Home size={20} />
+                            </button>
+                        )}
+                        <button
+                            className="flex items-center gap-2 cursor-pointer"
+                            onClick={() => setShowCalendar(true)}
+                            title="Elegir mes o día"
+                        >
+                            <h2 className="text-3xl font-black font-serif text-white uppercase tracking-tight">
+                                {headerLabel}
+                            </h2>
+                            <CalendarIcon className="text-white/80" size={20} />
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-1">
                         <button onClick={toggleTheme} className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
                             {isDark ? <Sun size={24} /> : <Moon size={24} />}
                         </button>
-                        <button className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
-                            <MoreVertical size={24} />
-                        </button>
+                        <Dropdown>
+                            <Dropdown.Trigger>
+                                <button className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
+                                    <MoreVertical size={24} />
+                                </button>
+                            </Dropdown.Trigger>
+                            <Dropdown.Content
+                                align="right"
+                                contentClasses="py-1 bg-white dark:bg-gray-900"
+                            >
+                                {auth?.user ? (
+                                                                        <>
+                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                            {auth.user.name}
+                                        </span>
+                                        <Dropdown.Link href={route('profile.edit')} className="dark:text-gray-200 dark:hover:bg-gray-800">
+                                            Mi perfil
+                                        </Dropdown.Link>
+                                        <Dropdown.Link href={route('settings')} className="dark:text-gray-200 dark:hover:bg-gray-800">
+                                            Configuración
+                                        </Dropdown.Link>
+                                        <form
+                                            onSubmit={(e) => {
+                                                e.preventDefault();
+                                                const form = e.target;
+                                                fetch(form.action, {
+                                                    method: 'POST',
+                                                    body: new FormData(form),
+                                                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                                                    credentials: 'same-origin',
+                                                }).then(() => window.location.reload());
+                                            }}
+                                            action={route('logout')}
+                                            method="POST"
+                                        >
+                                            <button
+                                                type="submit"
+                                                className="block w-full px-4 py-2 text-start text-sm leading-5 text-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 transition duration-150 ease-in-out hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                                            >
+                                                Cerrar sesión
+                                            </button>
+                                        </form>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                            Cuenta (opcional)
+                                        </span>
+                                        <Dropdown.Link href={route('settings')} className="dark:text-gray-200 dark:hover:bg-gray-800">
+                                            Configuración
+                                        </Dropdown.Link>
+                                        <Dropdown.Link href={route('login')} className="dark:text-gray-200 dark:hover:bg-gray-800">
+                                            Iniciar sesión
+                                        </Dropdown.Link>
+                                        <Dropdown.Link href={route('register')} className="dark:text-gray-200 dark:hover:bg-gray-800">
+                                            Crear cuenta
+                                        </Dropdown.Link>
+                                    </>
+                                )}
+                            </Dropdown.Content>
+                        </Dropdown>
                     </div>
                 </div>
             }
         >
             <Head title="Dashboard" />
 
-            <div className="py-6 max-w-lg mx-auto px-4 space-y-6">
+                        <div className="py-6 max-w-lg mx-auto px-4 space-y-6">
                 <BalanceCard
                     budget={budget}
-                    contextRate={budget.income_rate}
+                    contextRate={contextRate}
+                    rate={rate}
+                    dateFilter={dateFilter}
                     onEdit={() => setShowBudgetModal(true)}
                 />
 
@@ -92,12 +268,41 @@ export default function Dashboard() {
                     <div className="flex justify-between items-center px-1">
                         <h3 className="font-bold text-lg dark:text-white">Flujo</h3>
                         <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-                            <button className="px-3 py-1 text-xs font-bold rounded-md bg-white dark:bg-gray-700 shadow-sm">Mes</button>
-                            <button className="px-3 py-1 text-xs font-bold text-gray-500">7d</button>
-                            <button className="px-3 py-1 text-xs font-bold text-gray-500">1d</button>
+                            {['Mes', '7d', '1d'].map((mode) => (
+                                <button
+                                    key={mode}
+                                    onClick={() => applyRangeMode(mode)}
+                                    className={cn(
+                                        'px-3 py-1 text-xs font-bold rounded-md transition-colors',
+                                        rangeMode === mode
+                                            ? 'bg-white dark:bg-gray-700 shadow-sm dark:text-white'
+                                            : 'text-gray-500 dark:text-gray-400',
+                                    )}
+                                >
+                                    {mode}
+                                </button>
+                            ))}
                         </div>
                     </div>
-                    <BudgetGraph budget={budget} />
+
+                    {dayFilterCaption && (
+                        <div className="flex justify-between items-center px-1">
+                            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                                {dayFilterCaption}
+                            </span>
+                            <button
+                                onClick={() => navigate(budget.month_id, null)}
+                                className="text-xs font-black uppercase tracking-wider text-[#FF8A3D] dark:text-[#9B7BFF] hover:opacity-80"
+                            >
+                                Ver mes
+                            </button>
+                        </div>
+                    )}
+
+                    <BudgetGraph
+                        budget={budget}
+                        categories={visibleCategories}
+                    />
                 </div>
 
                 {/* Deuda Card */}
@@ -147,9 +352,12 @@ export default function Dashboard() {
 
                 <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors">
                     <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-bold text-lg dark:text-white uppercase tracking-wide">
-                            {selectedCategory?.name || 'Categoría'}
-                        </h4>
+                        <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setEditingCategory(selectedCategory); setShowCategoryModal(true); }}>
+                            <h4 className="font-bold text-lg dark:text-white uppercase tracking-wide">
+                                {selectedCategory?.name || 'Categoría'}
+                            </h4>
+                            <Edit2 size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </div>
                         <button
                             onClick={handleAddExpense}
                             className="bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white p-2 rounded-xl shadow-sm hover:scale-105 active:scale-95 transition-all"
@@ -158,8 +366,32 @@ export default function Dashboard() {
                         </button>
                     </div>
 
+                    {selectedCategory && (
+                        <div className="mb-4 space-y-1">
+                            <div className="flex justify-between items-end">
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Presupuestado</span>
+                                <span className="text-xs font-black dark:text-gray-200">Bs {parseFloat(selectedCategory.planned_bs).toLocaleString('es-ES')}</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
+                                <div
+                                    className={cn(
+                                        "h-full transition-all duration-500",
+                                        (parseFloat(selectedCategory.expenses?.reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) > parseFloat(selectedCategory.planned_bs))
+                                            ? "bg-red-500"
+                                            : "bg-[#FF8A3D] dark:bg-[#9B7BFF]"
+                                    )}
+                                    style={{ width: `${Math.min(100, (parseFloat(selectedCategory.expenses?.reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) / parseFloat(selectedCategory.planned_bs)) * 100)}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <div className="space-y-4">
-                        {budget.expenses.filter(e => e.category_name === selectedCategoryName).map(expense => (
+                        {(selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).length === 0 ? (
+                            <p className="text-center text-sm text-gray-400 font-bold py-6">
+                                {dateFilter ? 'No hay gastos en esa fecha' : 'Sin gastos todavía'}
+                            </p>
+                        ) : (selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).map(expense => (
                             <div key={expense.id} className="flex justify-between items-center group">
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
@@ -196,14 +428,14 @@ export default function Dashboard() {
                     <div className="flex justify-between items-center">
                         <span className="font-bold text-xs text-gray-400">TOTAL</span>
                         <span className="font-black text-lg dark:text-white">
-                            Bs {parseFloat(budget.expenses.filter(e => e.category_name === selectedCategoryName).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES')}
+                            Bs {parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES')}
                         </span>
                     </div>
                 </div>
 
                 <footer className="text-center pb-8">
                     <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">
-                        Presupuesto {version}
+                        Budget keeper - {version.replace('alpha ', '')}
                     </p>
                 </footer>
             </div>
@@ -229,6 +461,25 @@ export default function Dashboard() {
                 onClose={() => setShowDebtModal(false)}
                 debt={editingDebt}
                 monthId={budget.month_id}
+            />
+
+            <CategoryForm
+                show={showCategoryModal}
+                onClose={() => setShowCategoryModal(false)}
+                category={editingCategory}
+                monthId={budget.month_id}
+            />
+
+            {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}
+            <BudgetCalendar
+                show={showCalendar}
+                onClose={() => setShowCalendar(false)}
+                onSelect={(monthId, dayIso) => {
+                    setRangeMode(dayIso ? '1d' : 'Mes');
+                    navigate(monthId, dayIso);
+                }}
+                initialMonthId={budget.month_id}
+                initialDayIso={dateFilter}
             />
 
             {/* Category Selector */}

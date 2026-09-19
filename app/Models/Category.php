@@ -12,6 +12,7 @@ class Category extends Model
         'month_id',
         'name',
         'cash_expense',
+        'planned_bs',
         'position',
     ];
 

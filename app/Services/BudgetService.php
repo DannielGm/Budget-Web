@@ -5,9 +5,7 @@ namespace App\Services;
 use App\Models\Budget;
 use App\Models\Category;
 use App\Models\Debt;
-use App\Models\Expense;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class BudgetService
 {
@@ -15,6 +13,12 @@ class BudgetService
     {
         return Budget::with(['categories', 'expenses', 'debts'])->find($monthId);
     }
+
+    private const MONTH_NAMES = [
+        1 => 'Enero', 2 => 'Febrero', 3 => 'Marzo', 4 => 'Abril',
+        5 => 'Mayo', 6 => 'Junio', 7 => 'Julio', 8 => 'Agosto',
+        9 => 'Septiembre', 10 => 'Octubre', 11 => 'Noviembre', 12 => 'Diciembre',
+    ];
 
     public function loadOrCreate(string $monthId, ?string $templateMonthId = null): Budget
     {
@@ -40,12 +44,20 @@ class BudgetService
                 'opening_balance_bs' => $predecessor ? $this->calculateBalance($predecessor) : '0',
             ]);
 
+            // A brand-new month starts with the BCV rate that applies to it
+            // (matches the Kotlin app's loadOrCreate).
+            $monthRate = app(ExchangeRateService::class)->monthRateFor($monthId);
+            if ($monthRate !== null) {
+                $budget->update(['income_rate' => $monthRate->rate_bs_per_usd]);
+            }
+
             if ($template) {
                 foreach ($template->categories as $category) {
                     Category::create([
                         'month_id' => $monthId,
                         'name' => $category->name,
                         'cash_expense' => $category->cash_expense,
+                        'planned_bs' => $category->planned_bs,
                         'position' => $category->position,
                     ]);
                 }
@@ -69,7 +81,7 @@ class BudgetService
                 if (bccomp($creditPurchases, '0', 2) > 0) {
                     Debt::create([
                         'month_id' => $monthId,
-                        'label' => "Compras a crédito " . $this->getMonthName($predecessor->month_id),
+                        'label' => 'Compras a crédito '.$this->getMonthName($predecessor->month_id),
                         'opening_bs' => $creditPurchases,
                         'payment_bs' => '0',
                         'position' => 999, // Append to end
@@ -83,41 +95,25 @@ class BudgetService
 
     public function calculateBalance(Budget $budget): string
     {
-        $cashExpenses = $budget->expenses()
-            ->join('categories', function($join) {
-                $join->on('expenses.month_id', '=', 'categories.month_id')
-                     ->on('expenses.category_name', '=', 'categories.name');
-            })
-            ->where('categories.cash_expense', true)
-            ->sum('amount_bs');
-
-        $balance = bcadd($budget->opening_balance_bs, $budget->income_bs, 2);
-        $balance = bcsub($balance, (string)$cashExpenses, 2);
-
-        return $balance;
+        return $budget->balance_bs;
     }
 
     public function calculateCreditPurchases(Budget $budget): string
     {
-        return (string) $budget->expenses()
-            ->join('categories', function($join) {
-                $join->on('expenses.month_id', '=', 'categories.month_id')
-                     ->on('expenses.category_name', '=', 'categories.name');
-            })
-            ->where('categories.cash_expense', false)
-            ->sum('amount_bs');
+        return $budget->credit_purchases_bs;
     }
 
     private function getMonthLabel(string $monthId): string
     {
-        // Simple implementation for now
-        $date = \DateTime::createFromFormat('Y-m', $monthId);
-        return $date ? $date->format('F Y') : $monthId;
+        [$year, $month] = array_map('intval', explode('-', $monthId));
+
+        return (self::MONTH_NAMES[$month] ?? $monthId).' '.$year;
     }
 
     private function getMonthName(string $monthId): string
     {
-        $date = \DateTime::createFromFormat('Y-m', $monthId);
-        return $date ? $date->format('F') : $monthId;
+        $month = (int) substr($monthId, 5, 2);
+
+        return self::MONTH_NAMES[$month] ?? $monthId;
     }
 }

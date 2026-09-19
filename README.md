@@ -28,21 +28,32 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - Wired the initial dashboard with support for month selection and theme toggling.
 - Successfully seeded the database with the authoritative September financial record.
 
-## Planned phases
-
 ### alpha 0.0.2 — Interactive Editing & Dialogs
-- Port all remaining editor dialogs (Income addition, Expense creation/editing, Debt management).
-- Implement server-side validation for all financial inputs.
-- Add real-time UI updates after successful edits using Inertia.js state management.
+- Ported all editor dialogs (Income addition, Expense creation/editing, Debt management).
+- Implemented server-side validation for all financial inputs.
+- Added real-time UI updates after successful edits using Inertia.js state management.
 
-### alpha 0.0.3 — Multi-month Navigation & Calendar
-- Implement a web-based version of the Month/Day calendar picker.
-- Enable full multi-month navigation and day-level filtering on the dashboard.
-- Sync BCV exchange rate logic with the web backend for automatic daily updates.
+### alpha 0.0.3 — NativePHP Mobile Integration
+- Integrated `nativephp/mobile` (v4.5.0) into the Laravel project.
+- Configured app branding: **BKeeper - Budget Tracker** (`com.bkeeper.budgettracker`).
+- Automated the Laravel source bundling and Native PHP wrapper compilation.
+- Successfully generated the first debug APK for Android (`arm64-v8a`).
 
-### alpha 0.1.0 — Feature Parity
-- Reach 100% feature parity with the Android Phase 4.3.2 release.
-- Implement comprehensive unit and feature tests in PHP (Pest/PHPUnit).
+### alpha 0.0.4 — Multi-month Navigation & Calendar
+- Implemented a web-based version of the Month/Day calendar picker (Monday-first).
+- Enabled full multi-month navigation and day-level filtering (1d/7d/Month) on the dashboard.
+- Synced BCV exchange rate logic with the web backend for automatic daily updates and historical backfill.
+- Replaced confidential seed data with a synthetic 4-month mockup (showing upward/downward trends).
+
+### alpha 0.1.0 — Feature Parity & UI Fixes
+- Reached 100% feature parity with the Android Phase 4.3.2 release.
+- **Status Bar Integration**: Fixed clashing with Android status bar using safe-area insets.
+- **Budgeting (Planned vs Actual)**: Implemented `planned_bs` for categories with visual progress tracking.
+- **Data Portability**: Added JSON Export/Import system and a dedicated Settings screen.
+- **Branding**: Updated to **Budget keeper** naming convention across the app.
+- **Automated Testing**: Added unit tests for the core financial service engine.
+
+## Planned phases
 
 ### alpha 0.2.0 — Binance Integration
 - Introduce the dedicated Binance transaction detail and history view.

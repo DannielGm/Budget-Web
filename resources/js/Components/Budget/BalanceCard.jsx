@@ -1,5 +1,6 @@
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
+import { useForm } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -7,21 +8,38 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-export default function BalanceCard({ budget, contextRate, onEdit }) {
-    const balanceUsd = budget.income_rate > 0
-        ? (parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - calculateCashExpenses(budget)) / parseFloat(contextRate)
+export default function BalanceCard({ budget, contextRate, rate = null, dateFilter = null, onEdit }) {
+    const { post, processing } = useForm();
+
+    const cashExpenses = calculateCashExpenses(budget, dateFilter);
+    const balanceUsd = parseFloat(contextRate) > 0
+        ? (parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses) / parseFloat(contextRate)
         : 0;
 
-    const balanceBs = parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - calculateCashExpenses(budget);
+    const balanceBs = parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses;
+
+    const refreshRate = () => {
+        post(route('exchange-rate.refresh'), { preserveScroll: true });
+    };
 
     return (
         <div className="bg-[#FF8A3D] dark:bg-[#9B7BFF] rounded-2xl p-4 text-white shadow-lg transition-colors">
             <div className="flex justify-between items-start mb-2">
                 <span className="text-white/80 text-sm font-medium">Saldo disponible</span>
                 <div className="flex items-center gap-2">
+                    {rate?.stale && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                            desactualizada
+                        </span>
+                    )}
                     <span className="text-white/80 text-xs font-medium">{parseFloat(contextRate).toLocaleString('es-ES')} Bs/USD</span>
-                    <button className="p-1 hover:bg-white/10 rounded-full transition-colors">
-                        <RefreshCw size={16} />
+                    <button
+                        onClick={refreshRate}
+                        disabled={processing}
+                        title="Actualizar tasa BCV"
+                        className="p-1 hover:bg-white/10 rounded-full transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw size={16} className={cn(processing && 'animate-spin')} />
                     </button>
                 </div>
             </div>
@@ -58,8 +76,15 @@ export default function BalanceCard({ budget, contextRate, onEdit }) {
     );
 }
 
-function calculateCashExpenses(budget) {
+function calculateCashExpenses(budget, dateFilter = null) {
+    const cutoff = dateFilter
+        ? new Date(`${dateFilter}T23:59:59`).getTime()
+        : Infinity;
+
     return budget.expenses
-        .filter(e => budget.categories.find(c => c.name === e.category_name)?.cash_expense)
+        .filter((e) => {
+            const category = budget.categories.find((c) => c.name === e.category_name);
+            return category?.cash_expense && e.timestamp <= cutoff;
+        })
         .reduce((sum, e) => sum + parseFloat(e.amount_bs), 0);
 }

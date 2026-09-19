@@ -33,4 +33,38 @@ class Budget extends Model
     {
         return $this->hasMany(Debt::class, 'month_id', 'month_id')->orderBy('position');
     }
+
+    public function getCashBsAttribute(): string
+    {
+        return (string) $this->expenses()
+            ->join('categories', function($join) {
+                $join->on('expenses.month_id', '=', 'categories.month_id')
+                     ->on('expenses.category_name', '=', 'categories.name');
+            })
+            ->where('categories.cash_expense', true)
+            ->sum('amount_bs');
+    }
+
+    public function getCreditPurchasesBsAttribute(): string
+    {
+        return (string) $this->expenses()
+            ->join('categories', function($join) {
+                $join->on('expenses.month_id', '=', 'categories.month_id')
+                     ->on('expenses.category_name', '=', 'categories.name');
+            })
+            ->where('categories.cash_expense', false)
+            ->sum('amount_bs');
+    }
+
+    public function getBalanceBsAttribute(): string
+    {
+        $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
+        return bcsub($balance, $this->cash_bs, 2);
+    }
+
+    public function getDebtBsAttribute(): string
+    {
+        $debtsRemaining = $this->debts->sum(fn($d) => bcsub($d->opening_bs, $d->payment_bs, 2));
+        return bcadd($this->credit_purchases_bs, (string)$debtsRemaining, 2);
+    }
 }

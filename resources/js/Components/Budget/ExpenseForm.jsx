@@ -1,13 +1,22 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { useForm } from '@inertiajs/react';
 
+const pad = (n) => String(n).padStart(2, '0');
+
+function formatTimestamp(ms) {
+    const d = new Date(ms);
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
+    const [showDatePicker, setShowDatePicker] = useState(false);
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         id: expense?.id || '',
         month_id: monthId,
@@ -119,6 +128,36 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                     </div>
 
                     <div>
+                        <InputLabel htmlFor="timestamp" value="Fecha del gasto" className="dark:text-gray-300" />
+                        <div className="flex items-center gap-2 mt-1">
+                            <TextInput
+                                id="timestamp"
+                                type="text"
+                                value={formatTimestamp(Number(data.timestamp))}
+                                readOnly
+                                className="flex-1 dark:bg-gray-800 dark:text-white dark:border-gray-700"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowDatePicker(true)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:opacity-80"
+                            >
+                                Elegir
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setData('timestamp', Date.now())}
+                                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:opacity-80"
+                            >
+                                Hoy
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-400 font-bold dark:text-gray-500 mt-2">
+                            Tasa BCV aplicada automáticamente.
+                        </p>
+                    </div>
+
+                    <div>
                         <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
                             Equivalente: $ {data.amount_bs && data.rate ? (parseFloat(data.amount_bs) / parseFloat(data.rate)).toFixed(2) : '0.00'}
                         </p>
@@ -134,6 +173,26 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                     </PrimaryButton>
                 </div>
             </form>
+
+            {/* pickDay mode: choose the expense timestamp from the calendar */}
+            <BudgetCalendar
+                show={showDatePicker}
+                onClose={() => setShowDatePicker(false)}
+                mode="pickDay"
+                title="Fecha del gasto"
+                initialMonthId={monthId}
+                initialDayIso={(() => {
+                    const d = new Date(Number(data.timestamp));
+                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                })()}
+                onSelect={(calMonthId, dayIso) => {
+                    if (!dayIso) return;
+                    const previous = new Date(Number(data.timestamp));
+                    const picked = new Date(`${dayIso}T00:00:00`);
+                    picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
+                    setData('timestamp', picked.getTime());
+                }}
+            />
         </Modal>
     );
 }

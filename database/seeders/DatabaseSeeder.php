@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -16,7 +15,10 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         $this->call([
-            BudgetSeeder::class,
+            // Demo dataset (4 months of fake data) used by the mobile builds.
+            // BudgetSeeder still imports the private September dataset on demand:
+            // `php artisan db:seed --class=BudgetSeeder`.
+            FakeBudgetSeeder::class,
         ]);
     }
 }
