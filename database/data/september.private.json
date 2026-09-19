@@ -1,0 +1,341 @@
+{
+  "schemaVersion": 1,
+  "sourceSheet": "September",
+  "monthLabel": "Septiembre",
+  "debts": [
+    {
+      "label": "Tarjeta Visa",
+      "openingBs": "48635",
+      "paymentBs": "21000"
+    },
+    {
+      "label": "Tarjeta Mastercard",
+      "openingBs": "50985.72",
+      "paymentBs": "21000"
+    }
+  ],
+  "incomeBs": "220629.56",
+  "incomeRate": "794.99",
+  "categories": [
+    {
+      "name": "HOGAR",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "C11",
+          "label": "Teléfono",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "C12",
+          "label": "Servicio de Internet",
+          "amountBs": "6882.11",
+          "rate": "794.99"
+        },
+        {
+          "id": "C13",
+          "label": "Servicio de Luz",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "C14",
+          "label": "Agua",
+          "amountBs": "4000",
+          "rate": "794.99"
+        }
+      ]
+    },
+    {
+      "name": "ENTRETENIMIENTO",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "H11",
+          "label": "Cine",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H12",
+          "label": "Invitaciones ",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H13",
+          "label": "Restaurantes",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H14",
+          "label": "Conciertos",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H15",
+          "label": "Eventos deportivos",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H16",
+          "label": "Teatro",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H17",
+          "label": "Vacaciones",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H18",
+          "label": "Otros",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H19",
+          "label": "Otros",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "TRANSPORTE",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "C19",
+          "label": "Gastos de taxi o bus",
+          "amountBs": "5232.01",
+          "rate": "794.99"
+        }
+      ]
+    },
+    {
+      "name": "COMIDA",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "C24",
+          "label": "Mercado",
+          "amountBs": "30927.17",
+          "rate": "794.99"
+        },
+        {
+          "id": "C25",
+          "label": "Mercado 2",
+          "amountBs": "29477.0",
+          "rate": "794.99"
+        },
+        {
+          "id": "C26",
+          "label": "Otros",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "PRÉSTAMOS",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "H24",
+          "label": "Bancos",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H25",
+          "label": "Personales ",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H26",
+          "label": "Tarjeta de crédito Visa",
+          "amountBs": "21000",
+          "rate": "794.99"
+        },
+        {
+          "id": "H27",
+          "label": "Tarjeta de crédito Mastercard",
+          "amountBs": "21000",
+          "rate": "794.99"
+        },
+        {
+          "id": "H28",
+          "label": "Tarjeta de crédito",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H29",
+          "label": "Otros -Agua Gelran-",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "GASTOS PERSONALES",
+      "cashExpense": false,
+      "rows": [
+        {
+          "id": "C31",
+          "label": "Tipo C a C + forro a34",
+          "amountBs": "9459.92",
+          "rate": "794.99"
+        },
+        {
+          "id": "C32",
+          "label": "Hamburguesa+dulce napolitano+dulces",
+          "amountBs": "6788.79",
+          "rate": "794.99"
+        },
+        {
+          "id": "C33",
+          "label": "corte+pan+jamon",
+          "amountBs": "6015.27",
+          "rate": "794.99"
+        },
+        {
+          "id": "C34",
+          "label": "dulce",
+          "amountBs": "1373.61",
+          "rate": "794.99"
+        },
+        {
+          "id": "C35",
+          "label": "Arroz chino+toallitas humedas",
+          "amountBs": "1100.46",
+          "rate": "794.99"
+        },
+        {
+          "id": "C36",
+          "label": "Sin descripción",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "C37",
+          "label": "Sin descripción",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "C38",
+          "label": "Sin descripción",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "AHORROS O INVERSIONES",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "H34",
+          "label": "Ahorro",
+          "amountBs": "0",
+          "rate": "0"
+        },
+        {
+          "id": "H35",
+          "label": "Otros",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "DETALLES Y OCASIONES ESPECIALES",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "H40",
+          "label": "Comienzo de vacaciones Arroz Chino",
+          "amountBs": "11600.0",
+          "rate": "794.99"
+        },
+        {
+          "id": "H41",
+          "label": "Perro Caliente",
+          "amountBs": "850.0",
+          "rate": "794.99"
+        },
+        {
+          "id": "H42",
+          "label": "Corte de pelo ",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    },
+    {
+      "name": "OTROS",
+      "cashExpense": true,
+      "rows": [
+        {
+          "id": "C43",
+          "label": "Otros",
+          "amountBs": "0",
+          "rate": "0"
+        }
+      ]
+    }
+  ],
+  "conversions": [
+    {
+      "id": "I47",
+      "dateSerial": "46267.0",
+      "amountBs": "65000.0",
+      "rate": "968.698",
+      "usdt": "67.04"
+    },
+    {
+      "id": "I48",
+      "dateSerial": "46272.0",
+      "amountBs": "-4500.0",
+      "rate": "954.775",
+      "usdt": "-4.77"
+    },
+    {
+      "id": "I49",
+      "dateSerial": "46273.0",
+      "amountBs": "-5000.0",
+      "rate": "961.5",
+      "usdt": "-5.26"
+    },
+    {
+      "id": "I50",
+      "dateSerial": "46280.0",
+      "amountBs": "-11600.0",
+      "rate": "946.1",
+      "usdt": "-12.32"
+    },
+    {
+      "id": "I51",
+      "dateSerial": "46281.0",
+      "amountBs": "40000.0",
+      "rate": "964.99",
+      "usdt": "41.39"
+    },
+    {
+      "id": "I52",
+      "dateSerial": null,
+      "amountBs": "0",
+      "rate": "0",
+      "usdt": "0"
+    }
+  ]
+}
