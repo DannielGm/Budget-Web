@@ -11,7 +11,22 @@ class BudgetService
 {
     public function getBudget(string $monthId): ?Budget
     {
-        return Budget::with(['categories', 'expenses', 'debts'])->find($monthId);
+        $budget = Budget::with(['categories', 'expenses', 'debts', 'savingsTransactions'])->find($monthId);
+        if ($budget) {
+            // Append dynamic attributes for JSON serialization
+            $budget->append([
+                'cash_bs',
+                'credit_purchases_bs',
+                'debt_payments_bs',
+                'net_savings_bs',
+                'total_savings_usd',
+                'available_balance_bs',
+                'true_budget_bs',
+                'balance_bs',
+                'debt_bs',
+            ]);
+        }
+        return $budget;
     }
 
     private const MONTH_NAMES = [
@@ -95,7 +110,7 @@ class BudgetService
 
     public function calculateBalance(Budget $budget): string
     {
-        return $budget->balance_bs;
+        return $budget->available_balance_bs;
     }
 
     public function calculateCreditPurchases(Budget $budget): string

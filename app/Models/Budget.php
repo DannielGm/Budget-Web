@@ -34,6 +34,11 @@ class Budget extends Model
         return $this->hasMany(Debt::class, 'month_id', 'month_id')->orderBy('position');
     }
 
+    public function savingsTransactions(): HasMany
+    {
+        return $this->hasMany(SavingTransaction::class, 'month_id', 'month_id')->orderBy('timestamp', 'asc');
+    }
+
     public function getCashBsAttribute(): string
     {
         return (string) $this->expenses()
@@ -56,10 +61,46 @@ class Budget extends Model
             ->sum('amount_bs');
     }
 
+    public function getDebtPaymentsBsAttribute(): string
+    {
+        return (string) $this->debts()->sum('payment_bs');
+    }
+
+    public function getNetSavingsBsAttribute(): string
+    {
+        $depositsBs = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_bs');
+        $withdrawalsBs = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_bs');
+        return bcsub((string)$depositsBs, (string)$withdrawalsBs, 2);
+    }
+
+    public function getTotalSavingsUsdAttribute(): string
+    {
+        $depositsUsd = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
+        $withdrawalsUsd = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
+        return bcsub((string)$depositsUsd, (string)$withdrawalsUsd, 2);
+    }
+
+    public function getAvailableBalanceBsAttribute(): string
+    {
+        // Available Budget = Opening + Income - CashExpenses - DebtPayments - NetSavings
+        $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
+        $balance = bcsub($balance, $this->cash_bs, 2);
+        $balance = bcsub($balance, $this->debt_payments_bs, 2);
+        $balance = bcsub($balance, $this->net_savings_bs, 2);
+        return $balance;
+    }
+
+    public function getTrueBudgetBsAttribute(): string
+    {
+        // True Budget = Available Balance + (Total Savings USD * Current BCV Rate)
+        $savingsValueInBs = bcmul($this->total_savings_usd, $this->income_rate, 2);
+        return bcadd($this->available_balance_bs, $savingsValueInBs, 2);
+    }
+
     public function getBalanceBsAttribute(): string
     {
-        $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
-        return bcsub($balance, $this->cash_bs, 2);
+        // Maintained for backward compatibility in the dashboard, maps to available balance
+        return $this->available_balance_bs;
     }
 
     public function getDebtBsAttribute(): string

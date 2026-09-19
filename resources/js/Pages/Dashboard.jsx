@@ -8,10 +8,13 @@ import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
 import CategoryForm from '@/Components/Budget/CategoryForm';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
+import SavingsDashboard from '@/Components/Budget/SavingsDashboard';
+import SavingsForm from '@/Components/Budget/SavingsForm';
 import Dropdown from '@/Components/Dropdown';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const MONTH_SHORT = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -86,6 +89,11 @@ export default function Dashboard() {
     const [editingDebt, setEditingDebt] = useState(null);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [editingCategory, setEditingCategory] = useState(null);
+    const [showSavingsModal, setShowSavingsModal] = useState(false);
+    const [editingSaving, setEditingSaving] = useState(null);
+
+    // View state for swipeable dashboard (0 = Main, 1 = Savings)
+    const [currentViewIndex, setCurrentViewIndex] = useState(0);
 
     const toggleTheme = () => {
         setIsDark(!isDark);
@@ -158,6 +166,46 @@ export default function Dashboard() {
 
     const totalDebtBs = budget.debts.reduce((sum, d) => sum + (parseFloat(d.opening_bs) - parseFloat(d.payment_bs)), 0) + creditPurchasesBs;
 
+    const swipeVariants = {
+        enter: (direction) => {
+            return {
+                x: direction > 0 ? 1000 : -1000,
+                opacity: 0
+            };
+        },
+        center: {
+            zIndex: 1,
+            x: 0,
+            opacity: 1
+        },
+        exit: (direction) => {
+            return {
+                zIndex: 0,
+                x: direction < 0 ? 1000 : -1000,
+                opacity: 0
+            };
+        }
+    };
+    const [direction, setDirection] = useState(0);
+
+    const handleDragEnd = (e, { offset, velocity }) => {
+        const swipe = Math.abs(offset.x) * velocity.x;
+
+        if (swipe < -10000) {
+            // Swipe Left -> Go to Savings
+            if (currentViewIndex === 0) {
+                setDirection(1);
+                setCurrentViewIndex(1);
+            }
+        } else if (swipe > 10000) {
+            // Swipe Right -> Go to Main
+            if (currentViewIndex === 1) {
+                setDirection(-1);
+                setCurrentViewIndex(0);
+            }
+        }
+    };
+
     return (
         <AuthenticatedLayout
             header={
@@ -185,6 +233,22 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => {
+                                setDirection(currentViewIndex === 0 ? 1 : -1);
+                                setCurrentViewIndex(currentViewIndex === 0 ? 1 : 0);
+                            }}
+                            className={cn(
+                                "p-2 rounded-full transition-all flex items-center gap-2",
+                                currentViewIndex === 1
+                                    ? "bg-white text-[#FF8A3D] dark:text-[#9B7BFF]"
+                                    : "text-white hover:bg-white/10"
+                            )}
+                            title={currentViewIndex === 0 ? "Ver Ahorros" : "Ver Presupuesto"}
+                        >
+                            <Wallet size={20} />
+                        </button>
+
                         <button onClick={toggleTheme} className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
                             {isDark ? <Sun size={24} /> : <Moon size={24} />}
                         </button>
@@ -255,7 +319,26 @@ export default function Dashboard() {
         >
             <Head title="Dashboard" />
 
-                        <div className="py-6 max-w-lg mx-auto px-4 space-y-6">
+            <div className="py-6 max-w-lg mx-auto px-4 relative min-h-[85vh] overflow-x-hidden">
+                <AnimatePresence initial={false} custom={direction}>
+                    {currentViewIndex === 0 && (
+                        <motion.div
+                            key="main-dashboard"
+                            custom={direction}
+                            variants={swipeVariants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            transition={{
+                                x: { type: "spring", stiffness: 300, damping: 30 },
+                                opacity: { duration: 0.2 }
+                            }}
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={1}
+                            onDragEnd={handleDragEnd}
+                            className="absolute w-full pr-8 space-y-6 pb-24"
+                        >
                 <BalanceCard
                     budget={budget}
                     contextRate={contextRate}
@@ -438,6 +521,43 @@ export default function Dashboard() {
                         Budget keeper - {version.replace('alpha ', '')}
                     </p>
                 </footer>
+                        </motion.div>
+                    )}
+
+                    {currentViewIndex === 1 && (
+                        <motion.div
+                            key="savings-dashboard"
+                            custom={direction}
+                            variants={swipeVariants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            transition={{
+                                x: { type: "spring", stiffness: 300, damping: 30 },
+                                opacity: { duration: 0.2 }
+                            }}
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={1}
+                            onDragEnd={handleDragEnd}
+                            className="absolute w-full pr-8 space-y-6 pb-24"
+                        >
+                            <SavingsDashboard
+                                budget={budget}
+                                onAddSaving={(transaction) => {
+                                    setEditingSaving(transaction);
+                                    setShowSavingsModal(true);
+                                }}
+                            />
+
+                            <footer className="text-center pb-8">
+                                <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">
+                                    Budget keeper - {version.replace('alpha ', '')}
+                                </p>
+                            </footer>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
 
             {/* Modals */}
@@ -468,6 +588,14 @@ export default function Dashboard() {
                 onClose={() => setShowCategoryModal(false)}
                 category={editingCategory}
                 monthId={budget.month_id}
+            />
+
+            <SavingsForm
+                show={showSavingsModal}
+                onClose={() => setShowSavingsModal(false)}
+                transaction={editingSaving}
+                monthId={budget.month_id}
+                defaultRate={budget.income_rate}
             />
 
             {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}

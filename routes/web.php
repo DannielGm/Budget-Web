@@ -4,6 +4,7 @@ use App\Http\Controllers\BudgetController;
 use App\Http\Controllers\DebtController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\SavingTransactionController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -29,6 +30,10 @@ Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->nam
 Route::post('/debts', [DebtController::class, 'store'])->name('debts.store');
 Route::patch('/debts/{debt}', [DebtController::class, 'update'])->name('debts.update');
 Route::delete('/debts/{debt}', [DebtController::class, 'destroy'])->name('debts.destroy');
+
+Route::post('/savings', [SavingTransactionController::class, 'store'])->name('savings.store');
+Route::patch('/savings/{transaction}', [SavingTransactionController::class, 'update'])->name('savings.update');
+Route::delete('/savings/{transaction}', [SavingTransactionController::class, 'destroy'])->name('savings.destroy');
 
 Route::get('/export', [ExportController::class, 'export'])->name('export');
 Route::post('/import', [ExportController::class, 'import'])->name('import');
