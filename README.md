@@ -87,10 +87,4 @@ The application will be accessible at `http://localhost:8000`.
 
 ## Verification status
 
-**alpha 0.0.2** implemented. Verified core interactive features:
-- Expense creation/editing/deletion per category.
-- Budget settings updates (Income, Rate, Opening Balance).
-- Debt management with carry-forward support.
-- Feature tests passed for all CRUD operations.
-
-**alpha 0.0.1** successfully initialized and verified.
+**alpha 0.1.0** successfully initialized and verified.
