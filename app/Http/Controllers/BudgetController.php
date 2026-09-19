@@ -24,4 +24,17 @@ class BudgetController extends Controller
             'version' => config('budget.version'),
         ]);
     }
+
+    public function update(Request $request, \App\Models\Budget $budget)
+    {
+        $validated = $request->validate([
+            'income_bs' => 'required|numeric|min:0',
+            'income_rate' => 'required|numeric|min:0',
+            'opening_balance_bs' => 'required|numeric',
+        ]);
+
+        $budget->update($validated);
+
+        return back();
+    }
 }
