@@ -19,4 +19,9 @@ class Debt extends Model
     {
         return $this->belongsTo(Budget::class, 'month_id', 'month_id');
     }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(DebtPayment::class)->orderBy('timestamp', 'asc');
+    }
 }

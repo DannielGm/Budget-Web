@@ -11,7 +11,7 @@ class BudgetService
 {
     public function getBudget(string $monthId): ?Budget
     {
-        $budget = Budget::with(['categories', 'expenses', 'debts', 'savingsTransactions'])->find($monthId);
+        $budget = Budget::with(['categories', 'expenses', 'debts', 'debts.payments'])->find($monthId);
         if ($budget) {
             // Append dynamic attributes for JSON serialization
             $budget->append([
@@ -72,7 +72,7 @@ class BudgetService
                         'month_id' => $monthId,
                         'name' => $category->name,
                         'cash_expense' => $category->cash_expense,
-                        'planned_bs' => $category->planned_bs,
+                        'is_presupuesto' => $category->is_presupuesto,
                         'position' => $category->position,
                     ]);
                 }
@@ -116,6 +116,28 @@ class BudgetService
     public function calculateCreditPurchases(Budget $budget): string
     {
         return $budget->credit_purchases_bs;
+    }
+
+    public function seedMockData(string $currentMonthId): void
+    {
+        $seeder = new \Database\Seeders\FakeBudgetSeeder();
+        $seeder->seedBackwardsFrom($currentMonthId);
+    }
+
+    public function clearDay(string $monthId, string $dateIso): void
+    {
+        $budget = $this->getBudget($monthId);
+        if (!$budget) return;
+
+        $start = \Carbon\CarbonImmutable::parse($dateIso)->startOfDay()->timestamp * 1000;
+        $end = \Carbon\CarbonImmutable::parse($dateIso)->endOfDay()->timestamp * 1000;
+
+        $budget->expenses()->whereBetween('timestamp', [$start, $end])->delete();
+        $budget->savingsTransactions()->whereBetween('timestamp', [$start, $end])->delete();
+
+        foreach ($budget->debts as $debt) {
+            $debt->payments()->whereBetween('timestamp', [$start, $end])->delete();
+        }
     }
 
     private function getMonthLabel(string $monthId): string

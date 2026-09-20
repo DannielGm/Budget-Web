@@ -210,29 +210,28 @@ export default function Dashboard() {
         <AuthenticatedLayout
             header={
                 <div className="flex justify-between items-center w-full px-4 sm:px-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 overflow-hidden">
                         {isNotToday && (
                             <button
                                 onClick={goToToday}
                                 title="Ir a hoy"
-                                className="p-2 text-white hover:bg-white/10 rounded-full transition-all"
+                                className="p-2 shrink-0 text-white hover:bg-white/10 rounded-full transition-all"
                             >
                                 <Home size={20} />
                             </button>
                         )}
                         <button
-                            className="flex items-center gap-2 cursor-pointer"
+                            className="flex items-center gap-2 cursor-pointer truncate"
                             onClick={() => setShowCalendar(true)}
                             title="Elegir mes o día"
                         >
-                            <h2 className="text-3xl font-black font-serif text-white uppercase tracking-tight">
+                            <h2 className="text-xl sm:text-3xl font-black font-serif text-white uppercase tracking-tight truncate">
                                 {headerLabel}
                             </h2>
-                            <CalendarIcon className="text-white/80" size={20} />
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                         <button
                             onClick={() => {
                                 setDirection(currentViewIndex === 0 ? 1 : -1);
@@ -262,9 +261,25 @@ export default function Dashboard() {
                                 align="right"
                                 contentClasses="py-1 bg-white dark:bg-gray-900"
                             >
+                                <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                    Mantenimiento
+                                </span>
+                                <Dropdown.Link as="button" onClick={() => { if(confirm('¿Llenar con datos de prueba? Esto reemplazará los últimos 4 meses.')) router.post(route('settings.seed-mock')) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full">
+                                    Llenar datos de prueba
+                                </Dropdown.Link>
+                                <Dropdown.Link as="button" onClick={() => { if(confirm('¿Limpiar los gastos de ESTE DÍA?')) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter }) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full" disabled={!dateFilter}>
+                                    Limpiar datos del día
+                                </Dropdown.Link>
+                                <Dropdown.Link as="button" onClick={() => { if(confirm(`¿Limpiar todo el mes de ${budget.month_label}?`)) router.post(route('settings.clear-month', budget.month_id)) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full">
+                                    Limpiar mes actual
+                                </Dropdown.Link>
+                                <Dropdown.Link as="button" onClick={() => { if(confirm('¡PELIGRO! ¿Borrar TODOS los meses y datos?')) router.post(route('settings.clear')) }} className="text-red-600 dark:hover:bg-gray-800 text-left w-full">
+                                    Limpiar todos los datos
+                                </Dropdown.Link>
+
                                 {auth?.user ? (
-                                                                        <>
-                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
+                                    <>
+                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-y border-gray-100 dark:border-gray-800 mt-2">
                                             {auth.user.name}
                                         </span>
                                         <Dropdown.Link href={route('profile.edit')} className="dark:text-gray-200 dark:hover:bg-gray-800">
@@ -450,22 +465,15 @@ export default function Dashboard() {
                     </div>
 
                     {selectedCategory && (
-                        <div className="mb-4 space-y-1">
-                            <div className="flex justify-between items-end">
-                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Presupuestado</span>
-                                <span className="text-xs font-black dark:text-gray-200">Bs {parseFloat(selectedCategory.planned_bs).toLocaleString('es-ES')}</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden">
-                                <div
-                                    className={cn(
-                                        "h-full transition-all duration-500",
-                                        (parseFloat(selectedCategory.expenses?.reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) > parseFloat(selectedCategory.planned_bs))
-                                            ? "bg-red-500"
-                                            : "bg-[#FF8A3D] dark:bg-[#9B7BFF]"
-                                    )}
-                                    style={{ width: `${Math.min(100, (parseFloat(selectedCategory.expenses?.reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) / parseFloat(selectedCategory.planned_bs)) * 100)}%` }}
-                                />
-                            </div>
+                        <div className="mb-4">
+                            <span className={cn(
+                                "text-xs font-black px-2 py-0.5 rounded uppercase tracking-widest",
+                                selectedCategory.is_presupuesto
+                                    ? (isBudgetOk ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")
+                                    : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
+                            )}>
+                                {selectedCategory.is_presupuesto ? 'Presupuesto' : (selectedCategory.cash_expense ? 'Contado' : 'Crédito')}
+                            </span>
                         </div>
                     )}
 
@@ -495,7 +503,12 @@ export default function Dashboard() {
                                     </p>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-black text-sm dark:text-white">
+                                    <p className={cn(
+                                        "font-black text-sm transition-colors",
+                                        selectedCategory?.is_presupuesto
+                                            ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
+                                            : "dark:text-white"
+                                    )}>
                                         Bs {parseFloat(expense.amount_bs).toLocaleString('es-ES')}
                                     </p>
                                     <p className="text-[10px] text-gray-400 font-bold">
@@ -509,8 +522,13 @@ export default function Dashboard() {
                     <div className="h-px bg-gray-100 dark:bg-gray-800 my-4" />
 
                     <div className="flex justify-between items-center">
-                        <span className="font-bold text-xs text-gray-400">TOTAL</span>
-                        <span className="font-black text-lg dark:text-white">
+                        <span className="font-bold text-xs text-gray-400 uppercase tracking-widest">TOTAL</span>
+                        <span className={cn(
+                            "font-black text-lg transition-colors",
+                            selectedCategory?.is_presupuesto
+                                ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
+                                : "dark:text-white"
+                        )}>
                             Bs {parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES')}
                         </span>
                     </div>

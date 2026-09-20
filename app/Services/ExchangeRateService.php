@@ -42,33 +42,36 @@ class ExchangeRateService
         $today = CarbonImmutable::today()->toDateString();
         $error = null;
 
-        try {
-            $needsFetch = $force || ! ExchangeRate::whereKey($today)->exists();
+        // Memoize the snapshot per-request so we don't query the latest row repeatedly
+        return once(function () use ($today, $force, &$error) {
+            try {
+                $needsFetch = $force || ! ExchangeRate::whereKey($today)->exists();
 
-            if ($needsFetch) {
-                $this->fetchOfficial($today);
-                // Backfill the public history only when we fetched official
-                // data: this populates each month's boundary day so
-                // monthRateFor() can resolve historical months, and it is the
-                // only network touchpoint on a fresh install. When today is
-                // already cached we must NOT call out again (offline-safe).
-                $this->backfillIfNeeded();
+                if ($needsFetch) {
+                    $this->fetchOfficial($today);
+                    // Backfill the public history only when we fetched official
+                    // data: this populates each month's boundary day so
+                    // monthRateFor() can resolve historical months, and it is the
+                    // only network touchpoint on a fresh install. When today is
+                    // already cached we must NOT call out again (offline-safe).
+                    $this->backfillIfNeeded();
+                }
+
+                $this->refreshMonthRates();
+            } catch (Throwable $e) {
+                $error = $e->getMessage();
             }
 
-            $this->refreshMonthRates();
-        } catch (Throwable $e) {
-            $error = $e->getMessage();
-        }
+            $latest = ExchangeRate::orderBy('date_iso', 'desc')->first();
 
-        $latest = ExchangeRate::orderBy('date_iso', 'desc')->first();
-
-        return [
-            'rate' => $latest?->rate_bs_per_usd ?? '0',
-            'date_iso' => $latest?->date_iso ?? $today,
-            'updated_today' => $latest !== null && $latest->date_iso === $today,
-            'stale' => $latest === null || $latest->date_iso !== $today,
-            'error' => $error,
-        ];
+            return [
+                'rate' => $latest?->rate_bs_per_usd ?? '0',
+                'date_iso' => $latest?->date_iso ?? $today,
+                'updated_today' => $latest !== null && $latest->date_iso === $today,
+                'stale' => $latest === null || $latest->date_iso !== $today,
+                'error' => $error,
+            ];
+        });
     }
 
     /**
@@ -211,7 +214,7 @@ class ExchangeRateService
 
     private function getJson(string $url): array
     {
-        $response = Http::timeout(10)
+        $response = Http::timeout(3)->connectTimeout(3)
             ->acceptJson()
             ->get($url);
 

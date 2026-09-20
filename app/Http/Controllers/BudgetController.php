@@ -36,7 +36,7 @@ class BudgetController extends Controller
             : $monthRate;
 
         return Inertia::render('Dashboard', [
-            'budget' => $budget->load(['categories', 'expenses', 'debts', 'savingsTransactions'])->append([
+            'budget' => $budget->load(['categories', 'expenses', 'debts', 'debts.payments'])->append([
                 'cash_bs',
                 'credit_purchases_bs',
                 'debt_payments_bs',
@@ -47,6 +47,7 @@ class BudgetController extends Controller
                 'balance_bs',
                 'debt_bs',
             ]),
+            'savings' => Inertia::optional(fn () => $budget->savingsTransactions()->orderBy('timestamp', 'desc')->get()),
             'monthIds' => Budget::orderBy('month_id', 'desc')->pluck('month_id'),
             'version' => config('budget.version'),
             'rate' => $rateSnapshot,

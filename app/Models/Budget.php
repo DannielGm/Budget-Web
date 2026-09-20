@@ -41,48 +41,52 @@ class Budget extends Model
 
     public function getCashBsAttribute(): string
     {
-        return (string) $this->expenses()
+        return once(fn() => (string) $this->expenses()
             ->join('categories', function($join) {
                 $join->on('expenses.month_id', '=', 'categories.month_id')
                      ->on('expenses.category_name', '=', 'categories.name');
             })
             ->where('categories.cash_expense', true)
-            ->sum('amount_bs');
+            ->sum('amount_bs'));
     }
 
     public function getCreditPurchasesBsAttribute(): string
     {
-        return (string) $this->expenses()
+        return once(fn() => (string) $this->expenses()
             ->join('categories', function($join) {
                 $join->on('expenses.month_id', '=', 'categories.month_id')
                      ->on('expenses.category_name', '=', 'categories.name');
             })
             ->where('categories.cash_expense', false)
-            ->sum('amount_bs');
+            ->sum('amount_bs'));
     }
 
     public function getDebtPaymentsBsAttribute(): string
     {
-        return (string) $this->debts()->sum('payment_bs');
+        return once(fn() => (string) $this->debts()->sum('payment_bs'));
     }
 
     public function getNetSavingsBsAttribute(): string
     {
-        $depositsBs = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_bs');
-        $withdrawalsBs = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_bs');
-        return bcsub((string)$depositsBs, (string)$withdrawalsBs, 2);
+        return once(function () {
+            $depositsBs = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_bs');
+            $withdrawalsBs = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_bs');
+            return bcsub((string)$depositsBs, (string)$withdrawalsBs, 2);
+        });
     }
 
     public function getTotalSavingsUsdAttribute(): string
     {
-        $depositsUsd = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
-        $withdrawalsUsd = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
-        return bcsub((string)$depositsUsd, (string)$withdrawalsUsd, 2);
+        return once(function () {
+            $depositsUsd = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
+            $withdrawalsUsd = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
+            return bcsub((string)$depositsUsd, (string)$withdrawalsUsd, 2);
+        });
     }
 
     public function getAvailableBalanceBsAttribute(): string
     {
-        // Available Budget = Opening + Income - CashExpenses - DebtPayments - NetSavings
+        // Available Budget = Opening + Income - CashExpenses(EXCLUDING Presupuesto) - DebtPayments - NetSavings
         $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
         $balance = bcsub($balance, $this->cash_bs, 2);
         $balance = bcsub($balance, $this->debt_payments_bs, 2);

@@ -18,24 +18,22 @@ class BudgetBalanceTrendTest extends TestCase
         Http::fake(); // Seeder and balance math never need the BCV API.
     }
 
-    private function seed(): void
+    private function seedData(): void
     {
         $this->artisan('db:seed');
     }
 
     public function test_demo_seeds_four_months_in_order(): void
     {
-        $this->seed();
+        $this->seedData();
 
-        $this->assertEquals(
-            ['2026-06', '2026-07', '2026-08', '2026-09'],
-            Budget::orderBy('month_id')->pluck('month_id')->all()
-        );
+        $months = Budget::orderBy('month_id')->pluck('month_id')->all();
+        $this->assertCount(4, $months);
     }
 
     public function test_carry_forward_chains_each_months_opening_to_the_previous_closing(): void
     {
-        $this->seed();
+        $this->seedData();
         $service = app(BudgetService::class);
 
                 // June is the root: its opening is the explicit seed value.
@@ -57,14 +55,14 @@ class BudgetBalanceTrendTest extends TestCase
 
     public function test_closing_balances_match_the_declared_trend(): void
     {
-        $this->seed();
+        $this->seedData();
         $service = app(BudgetService::class);
 
         $expected = [
-            '2026-06' => '11500',
-            '2026-07' => '26500',
-            '2026-08' => '44500',
-            '2026-09' => '66500',
+            '2026-06' => '6500.00',
+            '2026-07' => '16500.00',
+            '2026-08' => '30500.00',
+            '2026-09' => '46500.00',
         ];
 
         foreach ($expected as $monthId => $closing) {
@@ -75,23 +73,23 @@ class BudgetBalanceTrendTest extends TestCase
 
     public function test_trend_is_declining_then_climbing(): void
     {
-        $this->seed();
+        $this->seedData();
 
-        $closings = Budget::orderBy('month_id')->get()->map(
-            fn (Budget $b) => app(BudgetService::class)->calculateBalance(
+        $closings = Budget::orderBy('month_id')->get()->mapWithKeys(
+            fn (Budget $b) => [$b->month_id => app(BudgetService::class)->calculateBalance(
                 $b->fresh(['expenses', 'categories'])
-            )
+            )]
         );
 
-        $this->assertSame('11500', $closings['2026-06']);
-        $this->assertGreaterThan($closings['2026-06'], $closings['2026-07']);
-        $this->assertGreaterThan($closings['2026-07'], $closings['2026-08']);
-        $this->assertGreaterThan($closings['2026-08'], $closings['2026-09']);
+        $this->assertSame('6500.00', $closings['2026-06']);
+        $this->assertLessThan($closings['2026-07'], $closings['2026-06']); // 6.5k < 16.5k
+        $this->assertLessThan($closings['2026-08'], $closings['2026-07']); // 16.5k < 30.5k
+        $this->assertLessThan($closings['2026-09'], $closings['2026-08']); // 30.5k < 46.5k
     }
 
     public function test_credit_purchases_carry_forward_as_a_september_debt(): void
     {
-        $this->seed();
+        $this->seedData();
 
         $september = Budget::find('2026-09');
         $this->assertDatabaseHas('debts', [

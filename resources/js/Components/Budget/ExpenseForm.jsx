@@ -6,7 +6,8 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
+import { ArrowRightLeft } from 'lucide-react';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -16,6 +17,7 @@ function formatTimestamp(ms) {
 }
 
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
+    const { budget } = usePage().props;
     const [showDatePicker, setShowDatePicker] = useState(false);
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         id: expense?.id || '',
@@ -26,6 +28,13 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
         rate: expense?.rate || defaultRate || '',
         timestamp: expense?.timestamp || Date.now(),
     });
+
+    const category = budget.categories.find(c => c.name === categoryName);
+    const isPresupuesto = category?.is_presupuesto;
+    const [moveToReal, setMoveToReal] = useState(false);
+    const [targetCategory, setTargetCategory] = useState('');
+
+    const realCategories = budget.categories.filter(c => !c.is_presupuesto);
 
     useEffect(() => {
         if (expense) {
@@ -45,13 +54,21 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             setData('rate', defaultRate);
             setData('timestamp', Date.now());
         }
+        setMoveToReal(false);
+        setTargetCategory(realCategories.length > 0 ? realCategories[0].name : '');
     }, [expense, categoryName, monthId, show]);
 
     const submit = (e) => {
         e.preventDefault();
 
+        let submitData = { ...data };
+        if (expense && isPresupuesto && moveToReal && targetCategory) {
+            submitData.category_name = targetCategory;
+        }
+
         if (expense) {
             patch(route('expenses.update', expense.id), {
+                data: submitData,
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -59,6 +76,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             });
         } else {
             post(route('expenses.store'), {
+                data: submitData,
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -126,6 +144,34 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                             <InputError message={errors.rate} className="mt-2" />
                         </div>
                     </div>
+
+                    {expense && isPresupuesto && (
+                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 mt-2">
+                            <div className="flex items-center gap-2 mb-3">
+                                <input
+                                    type="checkbox"
+                                    id="moveToReal"
+                                    checked={moveToReal}
+                                    onChange={(e) => setMoveToReal(e.target.checked)}
+                                    className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
+                                />
+                                <InputLabel htmlFor="moveToReal" value="Convertir en gasto real" className="dark:text-gray-300 cursor-pointer flex items-center gap-1 font-bold">
+                                    <ArrowRightLeft size={14} className="text-[#FF8A3D] dark:text-[#9B7BFF]" /> Convertir en gasto real
+                                </InputLabel>
+                            </div>
+                            {moveToReal && (
+                                <select
+                                    value={targetCategory}
+                                    onChange={(e) => setTargetCategory(e.target.value)}
+                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
+                                >
+                                    {realCategories.map(c => (
+                                        <option key={c.id} value={c.name}>{c.name}</option>
+                                    ))}
+                                </select>
+                            )}
+                        </div>
+                    )}
 
                     <div>
                         <InputLabel htmlFor="timestamp" value="Fecha del gasto" className="dark:text-gray-300" />

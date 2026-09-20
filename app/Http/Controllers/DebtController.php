@@ -32,16 +32,40 @@ class DebtController extends Controller
             'label' => 'sometimes|required|string',
             'opening_bs' => 'sometimes|required|numeric|min:0',
             'payment_bs' => 'required|numeric|min:0',
+            'additive_amount' => 'nullable|numeric|min:0',
+            'additive_method' => 'nullable|string',
         ]);
 
-        $debt->update($validated);
+        if (!empty($validated['additive_amount'])) {
+            \App\Models\DebtPayment::create([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'debt_id' => $debt->id,
+                'amount_bs' => $validated['additive_amount'],
+                'method' => $validated['additive_method'] ?? 'Transferencia',
+                'timestamp' => (int) (microtime(true) * 1000),
+            ]);
+        }
+
+        $debt->update([
+            'label' => $validated['label'] ?? $debt->label,
+            'opening_bs' => $validated['opening_bs'] ?? $debt->opening_bs,
+            'payment_bs' => $validated['payment_bs'],
+        ]);
 
         return back();
     }
 
-    public function destroy(Debt $debt)
+    public function destroyPayment(\App\Models\DebtPayment $payment)
     {
-        $debt->delete();
+        // Subtract the payment amount from the total debt payment
+        $debt = $payment->debt;
+        $debt->payment_bs = bcsub($debt->payment_bs, $payment->amount_bs, 2);
+        if (bccomp($debt->payment_bs, '0', 2) < 0) {
+            $debt->payment_bs = '0';
+        }
+        $debt->save();
+
+        $payment->delete();
 
         return back();
     }

@@ -18,7 +18,9 @@ Route::get('/', [BudgetController::class, 'index'])->name('dashboard');
 Route::post('/exchange-rate/refresh', [BudgetController::class, 'refreshRate'])->name('exchange-rate.refresh');
 
 Route::patch('/budgets/{budget}', [BudgetController::class, 'update'])->name('budgets.update');
+Route::post('/categories', [CategoryController::class, 'store'])->name('categories.store');
 Route::patch('/categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
+Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])->name('categories.destroy');
 
 Route::get('/settings', [BudgetController::class, 'settings'])->name('settings');
 Route::post('/settings/clear', [BudgetController::class, 'clearAll'])->name('settings.clear');
@@ -30,6 +32,7 @@ Route::delete('/expenses/{expense}', [ExpenseController::class, 'destroy'])->nam
 Route::post('/debts', [DebtController::class, 'store'])->name('debts.store');
 Route::patch('/debts/{debt}', [DebtController::class, 'update'])->name('debts.update');
 Route::delete('/debts/{debt}', [DebtController::class, 'destroy'])->name('debts.destroy');
+Route::delete('/debt-payments/{payment}', [DebtController::class, 'destroyPayment'])->name('debt-payments.destroy');
 
 Route::post('/savings', [SavingTransactionController::class, 'store'])->name('savings.store');
 Route::patch('/savings/{transaction}', [SavingTransactionController::class, 'update'])->name('savings.update');

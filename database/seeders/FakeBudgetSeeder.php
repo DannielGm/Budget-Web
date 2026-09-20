@@ -33,7 +33,7 @@ class FakeBudgetSeeder extends Seeder
             'income' => '180000',
             'rate' => '780',
             'opening' => '45000',
-            'closing' => '11500',
+            'closing' => '6500',
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|4200|5;Agua|3800|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|32000|2;Supermercado|18000|9;Panadería|4000|14',
@@ -45,7 +45,7 @@ class FakeBudgetSeeder extends Seeder
             'income' => '190000',
             'rate' => '790',
             'opening' => null,
-            'closing' => '26500',
+            'closing' => '16500',
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|5100|5;Agua|4000|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|22000|2;Supermercado|12400|9',
@@ -57,7 +57,7 @@ class FakeBudgetSeeder extends Seeder
             'income' => '200000',
             'rate' => '795',
             'opening' => null,
-            'closing' => '44500',
+            'closing' => '30500',
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6600|3;Servicio de Luz|5400|5;Agua|4000|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|26000|2;Supermercado|15000|9',
@@ -72,7 +72,7 @@ class FakeBudgetSeeder extends Seeder
             'income' => '220000',
             'rate' => '800',
             'opening' => null,
-            'closing' => '66500',
+            'closing' => '46500',
             'rows' => [
                 'HOGAR' => 'Alquiler|130000|1;Servicio de Internet|6900|3;Servicio de Luz|6100|5;Agua|4300|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|30000|2;Supermercado|15700|9',
@@ -93,18 +93,33 @@ class FakeBudgetSeeder extends Seeder
 
     public function run(): void
     {
-        // Idempotent: wipe only the demo months, keep anything else untouched.
-        Budget::whereIn('month_id', array_keys(self::PLAN))
+        $this->seedBackwardsFrom('2026-09');
+    }
+
+    public function seedBackwardsFrom(string $currentMonthId): void
+    {
+        // Re-align the plan to end at the requested month
+        $months = [];
+        $date = CarbonImmutable::createFromFormat('Y-m', $currentMonthId);
+
+        // Push 4 months backwards (3 up trend, 1 down trend)
+        for ($i = 0; $i < 4; $i++) {
+            $months[] = $date->subMonths(3 - $i)->format('Y-m');
+        }
+
+        // Remap the static plan to the new dynamic months
+        $dynamicPlan = [];
+        $staticKeys = array_keys(self::PLAN);
+        foreach ($months as $index => $monthId) {
+            $dynamicPlan[$monthId] = self::PLAN[$staticKeys[$index]];
+        }
+
+        Budget::whereIn('month_id', $months)
             ->each(fn (Budget $budget) => $budget->delete());
 
-        // Insert oldest first so each month sees its predecessor while the
-        // closing balance is being asserted.
-        $monthIds = array_keys(self::PLAN);
-        sort($monthIds);
-
-        foreach ($monthIds as $index => $monthId) {
-            $plan = self::PLAN[$monthId];
-            $opening = $plan['opening'] ?? $this->previousClosing($monthIds[$index - 1]);
+        foreach ($months as $index => $monthId) {
+            $plan = $dynamicPlan[$monthId];
+            $opening = $plan['opening'] ?? $this->previousClosing($months[$index - 1]);
             $this->seedMonth($monthId, $plan, $opening);
         }
     }
@@ -128,8 +143,8 @@ class FakeBudgetSeeder extends Seeder
         $budget = Budget::create([
             'month_id' => $monthId,
             'month_label' => $label,
-            'income_bs' => $plan['income'],
-            'income_rate' => $plan['rate'],
+            'income_bs' => $plan['income'] ?? '0',
+            'income_rate' => $plan['rate'] ?? '0',
             'opening_balance_bs' => $opening,
         ]);
 
@@ -166,18 +181,14 @@ class FakeBudgetSeeder extends Seeder
 
     private function seedCategory(string $monthId, string $name, bool $cash, int $position, string $rows): void
     {
-        // For the demo, "planned" is set to roughly 1.2x the actual total,
-        // or a fixed high value for empty/future months.
-        $actualTotal = 0;
-        foreach (explode(';', $rows) as $row) {
-            $actualTotal += (float) explode('|', $row)[1];
-        }
+        // Add a fake presupuesto category for testing the UI
+        $isPresupuesto = $name === 'ENTRETENIMIENTO';
 
         Category::create([
             'month_id' => $monthId,
             'name' => $name,
             'cash_expense' => $cash,
-            'planned_bs' => $actualTotal > 0 ? (string) ($actualTotal * 1.1) : '50000',
+            'is_presupuesto' => false,
             'position' => $position,
         ]);
 
