@@ -19,7 +19,7 @@ function formatTimestamp(ms) {
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
     const { budget } = usePage().props;
     const [showDatePicker, setShowDatePicker] = useState(false);
-    const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         id: expense?.id || '',
         month_id: monthId,
         category_name: categoryName,
@@ -58,17 +58,26 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
         setTargetCategory(realCategories.length > 0 ? realCategories[0].name : '');
     }, [expense, categoryName, monthId, show]);
 
+    transform((data) => {
+        if (expense && isPresupuesto && moveToReal && targetCategory) {
+            // "Convertir en gasto real": move the expense out of the
+            // presupuesto category into the chosen real one.
+            return { ...data, category_name: targetCategory };
+        }
+        // Never send the unchanged category on edit; update() must not
+        // move expenses INTO presupuesto categories.
+        if (expense) {
+            const { category_name, ...rest } = data;
+            return rest;
+        }
+        return data;
+    });
+
     const submit = (e) => {
         e.preventDefault();
 
-        let submitData = { ...data };
-        if (expense && isPresupuesto && moveToReal && targetCategory) {
-            submitData.category_name = targetCategory;
-        }
-
         if (expense) {
             patch(route('expenses.update', expense.id), {
-                data: submitData,
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -76,7 +85,6 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             });
         } else {
             post(route('expenses.store'), {
-                data: submitData,
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -84,6 +92,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             });
         }
     };
+
 
     const handleClose = () => {
         clearErrors();

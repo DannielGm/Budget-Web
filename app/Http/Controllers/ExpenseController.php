@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Expense;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class ExpenseController extends Controller
 {
@@ -43,7 +44,27 @@ class ExpenseController extends Controller
             'amount_bs' => 'required|numeric|min:0',
             'rate' => 'required|numeric|min:0',
             'timestamp' => 'required|integer',
+            // Only accepted when "Convertir en gasto real" moves the expense
+            // OUT of a presupuesto category into a real one. Moving INTO a
+            // presupuesto category is rejected, so the presupuesto rule
+            // (ignored in all balance equations) stays intact.
+            'category_name' => [
+                'sometimes',
+                'required',
+                'string',
+                Rule::exists('categories', 'name')->where(function ($query) use ($expense) {
+                    $query->where('month_id', $expense->month_id)
+                          ->where('is_presupuesto', 0);
+                }),
+            ],
         ]);
+        // Ignore category_name when it doesn't actually change, so clients
+        // that re-send the current (presupuesto) category never trip the
+        // "must be a real category" rule.
+        if (array_key_exists('category_name', $validated)
+            && $validated['category_name'] === $expense->category_name) {
+            unset($validated['category_name']);
+        }
 
         $expense->update($validated);
 

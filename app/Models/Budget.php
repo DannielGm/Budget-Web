@@ -51,7 +51,8 @@ class Budget extends Model
                 $join->on('expenses.month_id', '=', 'categories.month_id')
                      ->on('expenses.category_name', '=', 'categories.name');
             })
-            ->where('categories.cash_expense', true)
+            ->where('categories.cash_expense', 1)
+            ->where('categories.is_presupuesto', 0)
             ->sum('amount_bs'));
     }
 
@@ -62,7 +63,8 @@ class Budget extends Model
                 $join->on('expenses.month_id', '=', 'categories.month_id')
                      ->on('expenses.category_name', '=', 'categories.name');
             })
-            ->where('categories.cash_expense', false)
+            ->where('categories.cash_expense', 0)
+            ->where('categories.is_presupuesto', 0)
             ->sum('amount_bs'));
     }
 

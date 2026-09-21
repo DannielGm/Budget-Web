@@ -29,19 +29,24 @@ function formatTimestamp(ms) {
 }
 
 export default function DebtForm({ show, onClose, debt = null, monthId }) {
-    const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         month_id: monthId,
         label: debt?.label || '',
         opening_bs: debt?.opening_bs || '',
         payment_bs: debt?.payment_bs || '0',
+        additive_amount: '',
+        additive_method: 'Transferencia',
+        additive_timestamp: Date.now(),
     });
 
     const [isAdditive, setIsAdditive] = useState(false);
-    const [additiveAmount, setAdditiveAmount] = useState('');
-    const [additiveMethod, setAdditiveMethod] = useState('Transferencia');
-    const [additiveTimestamp, setAdditiveTimestamp] = useState(Date.now());
     const [showHistory, setShowHistory] = useState(false);
     const [showDatePicker, setShowDatePicker] = useState(false);
+
+    transform((data) => ({
+        ...data,
+        additive_amount: isAdditive ? data.additive_amount : null,
+    }));
 
     useEffect(() => {
         if (debt) {
@@ -50,10 +55,11 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                 label: debt.label,
                 opening_bs: debt.opening_bs,
                 payment_bs: debt.payment_bs,
+                additive_amount: '',
+                additive_method: 'Transferencia',
+                additive_timestamp: Date.now(),
             });
-            setIsAdditive(false);
-            setAdditiveAmount('');
-            setAdditiveTimestamp(Date.now());
+            setIsAdditive(false); // Default to false so "Pago inicial" is visible
             setShowHistory(false);
         } else {
             reset();
@@ -64,20 +70,8 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
     const submit = (e) => {
         e.preventDefault();
 
-        let finalPayment = data.payment_bs;
-        if (debt && isAdditive && additiveAmount !== '') {
-            finalPayment = (parseFloat(debt.payment_bs) + parseFloat(additiveAmount)).toString();
-        }
-
         if (debt) {
             patch(route('debts.update', debt.id), {
-                data: {
-                    ...data,
-                    payment_bs: finalPayment,
-                    additive_amount: isAdditive ? additiveAmount : null,
-                    additive_method: additiveMethod,
-                    additive_timestamp: additiveTimestamp,
-                },
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -108,7 +102,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
         if (isAdditive) {
             const currentPayment = parseFloat(debt?.payment_bs || 0);
-            const additive = parseFloat(additiveAmount) || 0;
+            const additive = parseFloat(data.additive_amount) || 0;
             return opening - currentPayment - additive;
         } else {
             const currentPayment = parseFloat(data.payment_bs) || 0;
@@ -127,7 +121,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         <Modal show={show} onClose={handleClose} maxWidth="md">
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {debt ? 'Editar Deuda' : 'Nueva Deuda'}
+                    {debt ? 'Editar Deuda ' : 'Nueva Deuda'}
                 </h2>
 
                 <div className="space-y-4">
@@ -166,40 +160,33 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
                             <div className="flex items-center justify-between mb-3">
                                 <InputLabel value={isAdditive ? "Registrar nuevo pago" : "Pago inicial"} className="dark:text-gray-300 font-bold" />
-                                <div className="flex items-center gap-3">
-                                    { !isAdditive && (
-                                        <span className="text-xs font-black dark:text-white">
-                                            Bs {parseFloat(debt.payment_bs || 0).toLocaleString('es-ES')}
-                                        </span>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAdditive(!isAdditive)}
+                                    className={cn(
+                                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
+                                        isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
                                     )}
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsAdditive(!isAdditive)}
+                                >
+                                    <span
                                         className={cn(
-                                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
-                                            isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
+                                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                            isAdditive ? "translate-x-5" : "translate-x-0"
                                         )}
-                                    >
-                                        <span
-                                            className={cn(
-                                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                                                isAdditive ? "translate-x-5" : "translate-x-0"
-                                            )}
-                                        />
-                                    </button>
-                                </div>
+                                    />
+                                </button>
                             </div>
 
-                            {isAdditive && (
+                            {isAdditive ? (
                                 <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                                     <TextInput
-                                        id="additiveAmount"
+                                        id="additive_amount"
                                         type="number"
                                         step="0.01"
                                         placeholder="Monto a pagar"
-                                        value={additiveAmount}
+                                        value={data.additive_amount}
                                         className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                        onChange={(e) => setAdditiveAmount(e.target.value)}
+                                        onChange={(e) => setData('additive_amount', e.target.value)}
                                         required
                                     />
                                     <div className="flex gap-2">
@@ -213,9 +200,22 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                                             title="Cambiar fecha del pago"
                                         >
                                             <CalendarIcon size={16} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">{formatTimestamp(additiveTimestamp)}</span>
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{formatTimestamp(data.additive_timestamp)}</span>
                                         </button>
                                     </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+                                    <TextInput
+                                        id="payment_bs"
+                                        type="number"
+                                        step="0.01"
+                                        name="payment_bs"
+                                        value={data.payment_bs}
+                                        className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
+                                        onChange={(e) => setData('payment_bs', e.target.value)}
+                                        required
+                                    />
                                 </div>
                             )}
                         </div>
@@ -291,15 +291,15 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                 title="Fecha del pago"
                 initialMonthId={monthId}
                 initialDayIso={(() => {
-                    const d = new Date(Number(additiveTimestamp));
+                    const d = new Date(Number(data.additive_timestamp));
                     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
                 })()}
                 onSelect={(calMonthId, dayIso) => {
                     if (!dayIso) return;
-                    const previous = new Date(Number(additiveTimestamp));
+                    const previous = new Date(Number(data.additive_timestamp));
                     const picked = new Date(`${dayIso}T00:00:00`);
                     picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
-                    setAdditiveTimestamp(picked.getTime());
+                    setData('additive_timestamp', picked.getTime());
                 }}
             />
         </Modal>

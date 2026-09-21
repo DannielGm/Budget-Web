@@ -11,12 +11,19 @@ function cn(...inputs) {
 export default function BalanceCard({ budget, contextRate, rate = null, dateFilter = null, onEdit }) {
     const { post, processing } = useForm();
 
-    const cashExpenses = calculateCashExpenses(budget, dateFilter);
-    const balanceUsd = parseFloat(contextRate) > 0
-        ? (parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses) / parseFloat(contextRate)
-        : 0;
+ const cashExpenses = calculateCashExpenses(budget, dateFilter);
 
-    const balanceBs = parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses;
+    // Aligned with the server: without a date filter use the official
+    // available_balance_bs (includes debt payments, deposits, withdrawals
+    // and transfers). With a date filter, keep the day-snapshot calculation
+    // (opening + income - cash up to that date).
+    const balanceBs = dateFilter
+        ? parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses
+        : parseFloat(budget.available_balance_bs);
+
+    const balanceUsd = parseFloat(contextRate) > 0
+        ? balanceBs / parseFloat(contextRate)
+        : 0;
 
     const refreshRate = () => {
         post(route('exchange-rate.refresh'), { preserveScroll: true });
@@ -84,7 +91,7 @@ function calculateCashExpenses(budget, dateFilter = null) {
     return budget.expenses
         .filter((e) => {
             const category = budget.categories.find((c) => c.name === e.category_name);
-            return category?.cash_expense && e.timestamp <= cutoff;
+            return category?.cash_expense && !category?.is_presupuesto && e.timestamp <= cutoff;
         })
         .reduce((sum, e) => sum + parseFloat(e.amount_bs), 0);
 }

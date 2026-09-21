@@ -55,6 +55,9 @@ class DebtController extends Controller
                 'method' => $validated['additive_method'] ?? 'Transferencia',
                 'timestamp' => $validated['additive_timestamp'] ?? (int) (microtime(true) * 1000),
             ]);
+
+            // Add the additive payment to the total payment_bs
+            $validated['payment_bs'] = bcadd($debt->payment_bs, $validated['additive_amount'], 2);
         }
 
         $debt->update([
