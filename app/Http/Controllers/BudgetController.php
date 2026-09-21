@@ -40,8 +40,8 @@ class BudgetController extends Controller
                 'cash_bs',
                 'credit_purchases_bs',
                 'debt_payments_bs',
-                'net_savings_bs',
-                'total_savings_usd',
+                'total_deposits_bs',
+                'total_withdrawals_bs',
                 'available_balance_bs',
                 'true_budget_bs',
                 'balance_bs',
@@ -81,14 +81,52 @@ class BudgetController extends Controller
 
     public function settings(): Response
     {
+        $budgets = Budget::orderBy('month_id', 'desc')->get();
+        $months = $budgets->map(fn (Budget $b) => [
+            'month_id' => $b->month_id,
+            'month_label' => $b->month_label,
+        ]);
+
         return Inertia::render('Settings', [
+            'months' => $months,
+            'monthIds' => $months->pluck('month_id'),
             'version' => config('budget.version'),
         ]);
+    }
+
+    public function seedMock(): RedirectResponse
+    {
+        $targetMonth = config('budget.seed_month', '2026-09');
+        $seeder = new \Database\Seeders\FakeBudgetSeeder();
+        $seeder->seedBackwardsFrom($targetMonth);
+
+        return to_route('dashboard');
+    }
+
+    public function clearMonth(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'month_id' => 'required|string|exists:budgets,month_id',
+        ]);
+
+        $monthId = $validated['month_id'];
+
+        DB::transaction(function () use ($monthId) {
+            Expense::where('month_id', $monthId)->delete();
+            SavingTransaction::where('month_id', $monthId)->delete();
+            Debt::where('month_id', $monthId)->delete();
+            Category::where('month_id', $monthId)->delete();
+            Budget::where('month_id', $monthId)->delete();
+        });
+
+        return to_route('settings');
     }
 
     public function clearAll()
     {
         \Illuminate\Support\Facades\DB::transaction(function () {
+            \App\Models\DebtPayment::truncate();
+            \App\Models\SavingTransaction::truncate();
             \App\Models\Expense::truncate();
             \App\Models\Debt::truncate();
             \App\Models\Category::truncate();

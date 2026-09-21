@@ -52,10 +52,10 @@ export default function SavingsDashboard({ budget, onAddSaving }) {
 
                 <div className="mb-2 relative z-10">
                     <h1 className="text-5xl font-black font-serif tracking-tight">
-                        $ {parseFloat(budget.total_savings_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        $ {parseFloat(budget.total_withdrawals_bs || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                     </h1>
                     <p className="text-white/70 text-sm font-bold mt-1">
-                        ≈ Bs {(parseFloat(budget.total_savings_usd || 0) * parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        ≈ Bs {(parseFloat(budget.total_withdrawals_bs || 0) * parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                     </p>
                 </div>
 

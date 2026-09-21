@@ -66,38 +66,39 @@ class Budget extends Model
         return once(fn() => (string) $this->debts()->sum('payment_bs'));
     }
 
-    public function getNetSavingsBsAttribute(): string
+
+    public function getTotalDepositsBsAttribute(): string
     {
-        return once(function () {
-            $depositsBs = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_bs');
-            $withdrawalsBs = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_bs');
-            return bcsub((string)$depositsBs, (string)$withdrawalsBs, 2);
-        });
+        return (string) $this->savingsTransactions()
+            ->where('type', 'deposit')
+            ->sum('amount_bs');
     }
 
-    public function getTotalSavingsUsdAttribute(): string
+    public function getTotalWithdrawalsBsAttribute(): string
     {
-        return once(function () {
-            $depositsUsd = $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
-            $withdrawalsUsd = $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
-            return bcsub((string)$depositsUsd, (string)$withdrawalsUsd, 2);
-        });
+        return (string) $this->savingsTransactions()
+            ->where('type', 'withdrawal')
+            ->sum('amount_bs');
     }
 
     public function getAvailableBalanceBsAttribute(): string
     {
-        // Available Budget = Opening + Income - CashExpenses(EXCLUDING Presupuesto) - DebtPayments - NetSavings
+        // Available Budget = Opening + Income - CashExpenses - DebtPayments - TotalDeposits + TotalWithdrawals
         $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
         $balance = bcsub($balance, $this->cash_bs, 2);
         $balance = bcsub($balance, $this->debt_payments_bs, 2);
-        $balance = bcsub($balance, $this->net_savings_bs, 2);
+        $balance = bcsub($balance, $this->total_deposits_bs, 2);
+        $balance = bcadd($balance, $this->total_withdrawals_bs, 2);
         return $balance;
     }
 
     public function getTrueBudgetBsAttribute(): string
     {
         // True Budget = Available Balance + (Total Savings USD * Current BCV Rate)
-        $savingsValueInBs = bcmul($this->total_savings_usd, $this->income_rate, 2);
+        $depositsUsd = (string) $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
+        $withdrawalsUsd = (string) $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
+        $totalSavingsUsd = bcsub($depositsUsd, $withdrawalsUsd, 2);
+        $savingsValueInBs = bcmul($totalSavingsUsd, $this->income_rate, 2);
         return bcadd($this->available_balance_bs, $savingsValueInBs, 2);
     }
 

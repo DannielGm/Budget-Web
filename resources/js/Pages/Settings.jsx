@@ -2,12 +2,12 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, useForm, usePage } from '@inertiajs/react';
 import React from 'react';
 import PrimaryButton from '@/Components/PrimaryButton';
-import SecondaryButton from '@/Components/SecondaryButton';
-import { Download, Upload, Trash2, Database } from 'lucide-react';
+import { Download, Upload, Trash2, Database, Calendar } from 'lucide-react';
 
 export default function Settings() {
-    const { version } = usePage().props;
-    const { post, processing } = useForm();
+    const { version, months = [], monthIds = [] } = usePage().props;
+    const { post: postClear, processing: processingClear } = useForm();
+    const { post: postClearMonth } = useForm();
 
     const handleExport = () => {
         window.location.href = route('export');
@@ -26,9 +26,15 @@ export default function Settings() {
         });
     };
 
-    const handleClearData = () => {
+    const handleClearAll = () => {
         if (confirm('¿Estás seguro de borrar TODOS los datos? Esta acción no se puede deshacer.')) {
-            post(route('dashboard'), { data: { action: 'clear_all' } }); // Logic to be handled in controller
+            postClear(route('settings.clear'));
+        }
+    };
+
+    const handleClearMonth = (monthId) => {
+        if (confirm('¿Estás seguro de borrar todos los datos de este mes? Esta acción no se puede deshacer.')) {
+            postClearMonth(route('settings.clear-month'), { month_id: monthId });
         }
     };
 
@@ -85,13 +91,55 @@ export default function Settings() {
                         Zona de Peligro
                     </h3>
                     <p className="text-sm text-red-500/80 dark:text-red-400/80 mb-4 font-medium">
-                        Borra permanentemente todos los presupuestos, gastos y deudas registrados.
+                        Borra permanentemente presupuestos, gastos, deudas y transacciones de ahorro.
                     </p>
+
+                    {months.length > 0 && (
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-red-700 dark:text-red-300 mb-2">
+                                <Calendar size={14} className="inline mr-1" />
+                                Limpiar un mes
+                            </label>
+                            <div className="flex gap-2">
+                                <select
+                                    defaultValue=""
+                                    className="flex-1 px-3 py-2 border border-red-200 dark:border-red-800/30 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-sm focus:ring-2 focus:ring-red-500/30"
+                                >
+                                    <option value="">Seleccionar mes...</option>
+                                    {months.map((month) => (
+                                        <option key={month.month_id} value={month.month_id}>
+                                            {month.month_label}
+                                        </option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const select = document.querySelector('select');
+                                        const monthId = select.value;
+                                        if (monthId) {
+                                            handleClearMonth(monthId);
+                                            select.value = '';
+                                        }
+                                    }}
+                                    disabled={processingClear}
+                                    className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white rounded-lg text-sm font-bold shadow transition-colors"
+                                >
+                                    Borrar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="h-px bg-red-200 dark:bg-red-800/20 my-4" />
+
                     <button
-                        onClick={handleClearData}
-                        className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm font-bold shadow-lg transition-all uppercase tracking-widest"
+                        onClick={handleClearAll}
+                        disabled={processingClear}
+                        className="w-full py-3 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white rounded-xl text-sm font-bold shadow-lg transition-all uppercase tracking-widest flex items-center justify-center gap-2"
                     >
-                        Limpiar Todo
+                        <Trash2 size={16} />
+                        Borrar Todo
                     </button>
                 </div>
 

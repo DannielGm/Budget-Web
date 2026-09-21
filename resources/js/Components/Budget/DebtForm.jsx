@@ -5,8 +5,16 @@ import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { useForm, router } from '@inertiajs/react';
-import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+
+const pad = (n) => String(n).padStart(2, '0');
+
+function formatTimestamp(ms) {
+    const d = new Date(ms);
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getFullYear())}`;
+}
 
 export default function DebtForm({ show, onClose, debt = null, monthId }) {
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
@@ -19,7 +27,9 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
     const [isAdditive, setIsAdditive] = useState(false);
     const [additiveAmount, setAdditiveAmount] = useState('');
     const [additiveMethod, setAdditiveMethod] = useState('Transferencia');
+    const [additiveTimestamp, setAdditiveTimestamp] = useState(Date.now());
     const [showHistory, setShowHistory] = useState(false);
+    const [showDatePicker, setShowDatePicker] = useState(false);
 
     useEffect(() => {
         if (debt) {
@@ -31,6 +41,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
             });
             setIsAdditive(false);
             setAdditiveAmount('');
+            setAdditiveTimestamp(Date.now());
             setShowHistory(false);
         } else {
             reset();
@@ -48,7 +59,13 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
         if (debt) {
             patch(route('debts.update', debt.id), {
-                data: { ...data, payment_bs: finalPayment, additive_amount: isAdditive ? additiveAmount : null, additive_method: additiveMethod },
+                data: {
+                    ...data,
+                    payment_bs: finalPayment,
+                    additive_amount: isAdditive ? additiveAmount : null,
+                    additive_method: additiveMethod,
+                    additive_timestamp: additiveTimestamp,
+                },
                 onSuccess: () => {
                     reset();
                     onClose();
@@ -139,17 +156,28 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                                         onChange={(e) => setAdditiveAmount(e.target.value)}
                                         required
                                     />
-                                    <select
-                                        value={additiveMethod}
-                                        onChange={(e) => setAdditiveMethod(e.target.value)}
-                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
-                                    >
-                                        <option value="Transferencia">Transferencia</option>
-                                        <option value="Pago Móvil">Pago Móvil</option>
-                                        <option value="Efectivo Bs">Efectivo Bs</option>
-                                        <option value="Efectivo USD">Efectivo USD</option>
-                                        <option value="Binance">Binance</option>
-                                    </select>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={additiveMethod}
+                                            onChange={(e) => setAdditiveMethod(e.target.value)}
+                                            className="block flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
+                                        >
+                                            <option value="Transferencia">Transferencia</option>
+                                            <option value="Pago Móvil">Pago Móvil</option>
+                                            <option value="Efectivo Bs">Efectivo Bs</option>
+                                            <option value="Efectivo USD">Efectivo USD</option>
+                                            <option value="Binance">Binance</option>
+                                        </select>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowDatePicker(true)}
+                                            className="px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
+                                            title="Cambiar fecha del pago"
+                                        >
+                                            <CalendarIcon size={16} />
+                                            <span className="text-[10px] font-bold uppercase tracking-wider">{formatTimestamp(additiveTimestamp)}</span>
+                                        </button>
+                                    </div>
                                 </div>
                             ) : (
                                 <TextInput
@@ -228,6 +256,25 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                     </PrimaryButton>
                 </div>
             </form>
+
+            <BudgetCalendar
+                show={showDatePicker}
+                onClose={() => setShowDatePicker(false)}
+                mode="pickDay"
+                title="Fecha del pago"
+                initialMonthId={monthId}
+                initialDayIso={(() => {
+                    const d = new Date(Number(additiveTimestamp));
+                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                })()}
+                onSelect={(calMonthId, dayIso) => {
+                    if (!dayIso) return;
+                    const previous = new Date(Number(additiveTimestamp));
+                    const picked = new Date(`${dayIso}T00:00:00`);
+                    picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
+                    setAdditiveTimestamp(picked.getTime());
+                }}
+            />
         </Modal>
     );
 }

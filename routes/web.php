@@ -24,6 +24,8 @@ Route::delete('/categories/{category}', [CategoryController::class, 'destroy'])-
 
 Route::get('/settings', [BudgetController::class, 'settings'])->name('settings');
 Route::post('/settings/clear', [BudgetController::class, 'clearAll'])->name('settings.clear');
+Route::post('/settings/seed-mock', [BudgetController::class, 'seedMock'])->name('settings.seed-mock');
+Route::post('/settings/clear-month', [BudgetController::class, 'clearMonth'])->name('settings.clear-month');
 
 Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
 Route::patch('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');

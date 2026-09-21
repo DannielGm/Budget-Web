@@ -1,12 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage, router } from '@inertiajs/react';
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import BudgetGraph from '@/Components/Budget/BudgetGraph';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
 import CategoryForm from '@/Components/Budget/CategoryForm';
+import CategoryAccordion from '@/Components/Budget/CategoryAccordion';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import SavingsDashboard from '@/Components/Budget/SavingsDashboard';
 import SavingsForm from '@/Components/Budget/SavingsForm';
@@ -15,6 +16,8 @@ import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, T
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
 
 const MONTH_SHORT = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -91,9 +94,38 @@ export default function Dashboard() {
     const [editingCategory, setEditingCategory] = useState(null);
     const [showSavingsModal, setShowSavingsModal] = useState(false);
     const [editingSaving, setEditingSaving] = useState(null);
+    const [showCategoryAccordion, setShowCategoryAccordion] = useState(false);
+    const [showDebtSummary, setShowDebtSummary] = useState(false);
 
     // View state for swipeable dashboard (0 = Main, 1 = Savings)
     const [currentViewIndex, setCurrentViewIndex] = useState(0);
+
+    // Intersection observer state for bottom category bar
+    const [showBottomBar, setShowBottomBar] = useState(false);
+    const expensesContainerRef = useRef(null);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                setShowBottomBar(entry.isIntersecting);
+            },
+            {
+                root: null,
+                rootMargin: '0px',
+                threshold: 0.05,
+            }
+        );
+
+        if (expensesContainerRef.current) {
+            observer.observe(expensesContainerRef.current);
+        }
+
+        return () => {
+            if (expensesContainerRef.current) {
+                observer.unobserve(expensesContainerRef.current);
+            }
+        };
+    }, [currentViewIndex]);
 
     const toggleTheme = () => {
         setIsDark(!isDark);
@@ -406,9 +438,12 @@ export default function Dashboard() {
                 {/* Deuda Card */}
                 <div className="bg-[#1A1A1A] rounded-2xl p-4 text-white shadow-lg overflow-hidden relative">
                     <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-2">
-                            <CreditCard className="text-gray-400" size={18} />
-                            <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400">Estado de Deuda</h4>
+                        <div
+                            className="flex items-center gap-2 cursor-pointer group"
+                            onClick={() => setShowDebtSummary(true)}
+                        >
+                            <CreditCard className="text-gray-400 group-hover:text-white transition-colors" size={18} />
+                            <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">Estado de Deuda</h4>
                         </div>
                         <button
                             onClick={() => { setEditingDebt(null); setShowDebtModal(true); }}
@@ -448,9 +483,12 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors">
+                <div
+                    ref={expensesContainerRef}
+                    className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors"
+                >
                     <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-2 group cursor-pointer" onClick={() => { setEditingCategory(selectedCategory); setShowCategoryModal(true); }}>
+                        <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setShowCategoryAccordion(true)}>
                             <h4 className="font-bold text-lg dark:text-white uppercase tracking-wide">
                                 {selectedCategory?.name || 'Categoría'}
                             </h4>
@@ -608,6 +646,25 @@ export default function Dashboard() {
                 monthId={budget.month_id}
             />
 
+            <CategoryAccordion
+                show={showCategoryAccordion}
+                onClose={() => setShowCategoryAccordion(false)}
+                categories={budget.categories}
+                selectedCategoryName={selectedCategoryName}
+                onSelect={(name) => {
+                    setSelectedCategoryName(name);
+                    setShowCategoryAccordion(false);
+                }}
+                onCreate={() => {
+                    setEditingCategory(null);
+                    setShowCategoryModal(true);
+                }}
+                onEdit={(cat) => {
+                    setEditingCategory(cat);
+                    setShowCategoryModal(true);
+                }}
+            />
+
             <SavingsForm
                 show={showSavingsModal}
                 onClose={() => setShowSavingsModal(false)}
@@ -615,6 +672,17 @@ export default function Dashboard() {
                 monthId={budget.month_id}
                 defaultRate={budget.income_rate}
             />
+
+            <Suspense fallback={null}>
+                {showDebtSummary && (
+                    <DebtSummaryModal
+                        show={showDebtSummary}
+                        onClose={() => setShowDebtSummary(false)}
+                        debts={budget.debts}
+                        currentRate={budget.income_rate}
+                    />
+                )}
+            </Suspense>
 
             {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}
             <BudgetCalendar
@@ -629,24 +697,34 @@ export default function Dashboard() {
             />
 
             {/* Category Selector */}
-            <div className="fixed bottom-6 left-0 right-0 flex justify-center px-4 pointer-events-none">
-                <div className="bg-white/80 dark:bg-black/80 backdrop-blur-md border border-white/20 rounded-2xl p-1 shadow-2xl flex gap-1 pointer-events-auto overflow-x-auto max-w-full no-scrollbar">
-                    {budget.categories.map(cat => (
-                        <button
-                            key={cat.id}
-                            onClick={() => setSelectedCategoryName(cat.name)}
-                            className={cn(
-                                "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
-                                selectedCategoryName === cat.name
-                                    ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-md"
-                                    : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                            )}
-                        >
-                            {cat.name}
-                        </button>
-                    ))}
-                </div>
-            </div>
+            <AnimatePresence>
+                {showBottomBar && currentViewIndex === 0 && (
+                    <motion.div
+                        initial={{ y: 100, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 100, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        className="fixed bottom-6 left-0 right-0 flex justify-center px-4 pointer-events-none z-50"
+                    >
+                        <div className="bg-white/80 dark:bg-black/80 backdrop-blur-md border border-white/20 rounded-2xl p-1 shadow-2xl flex gap-1 pointer-events-auto overflow-x-auto max-w-full no-scrollbar">
+                            {budget.categories.map(cat => (
+                                <button
+                                    key={cat.id}
+                                    onClick={() => setSelectedCategoryName(cat.name)}
+                                    className={cn(
+                                        "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                                        selectedCategoryName === cat.name
+                                            ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-md"
+                                            : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                    )}
+                                >
+                                    {cat.name}
+                                </button>
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </AuthenticatedLayout>
     );
 }

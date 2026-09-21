@@ -34,6 +34,7 @@ class DebtController extends Controller
             'payment_bs' => 'required|numeric|min:0',
             'additive_amount' => 'nullable|numeric|min:0',
             'additive_method' => 'nullable|string',
+            'additive_timestamp' => 'nullable|numeric',
         ]);
 
         if (!empty($validated['additive_amount'])) {
@@ -42,7 +43,7 @@ class DebtController extends Controller
                 'debt_id' => $debt->id,
                 'amount_bs' => $validated['additive_amount'],
                 'method' => $validated['additive_method'] ?? 'Transferencia',
-                'timestamp' => (int) (microtime(true) * 1000),
+                'timestamp' => $validated['additive_timestamp'] ?? (int) (microtime(true) * 1000),
             ]);
         }
 

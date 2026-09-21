@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Models\Category;
 use App\Models\Debt;
 use App\Models\Expense;
+use App\Models\SavingTransaction;
 use App\Services\BudgetService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Seeder;
@@ -14,10 +15,11 @@ use RuntimeException;
 
 /**
  * Demo dataset for the mobile builds: four fake months showing an upward
- * balance trend in three months plus a single declining month.
+ * balance trend. Savings transactions (deposits/withdrawals) are included
+ * to demonstrate the savings tracking feature.
  *
- * Months run backwards from September 2026 (2026-09 to 2026-06). Each month
- * opens with the previous month closing balance - exactly what the
+ * Months run backwards from the configured seed_month (default 2026-09).
+ * Each month opens with the previous month closing balance - exactly what the
  * carry-forward engine computes - and declares the closing balance it must
  * produce, so a broken rule fails loudly instead of drifting silently.
  */
@@ -33,7 +35,12 @@ class FakeBudgetSeeder extends Seeder
             'income' => '180000',
             'rate' => '780',
             'opening' => '45000',
-            'closing' => '6500',
+            'closing' => '1820',
+            'savings' => [
+                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '5'],
+                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '2'],
+                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '1'],
+            ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|4200|5;Agua|3800|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|32000|2;Supermercado|18000|9;Panadería|4000|14',
@@ -45,7 +52,12 @@ class FakeBudgetSeeder extends Seeder
             'income' => '190000',
             'rate' => '790',
             'opening' => null,
-            'closing' => '16500',
+            'closing' => '4710',
+            'savings' => [
+                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '8'],
+                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '3'],
+                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '2'],
+            ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|5100|5;Agua|4000|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|22000|2;Supermercado|12400|9',
@@ -57,7 +69,12 @@ class FakeBudgetSeeder extends Seeder
             'income' => '200000',
             'rate' => '795',
             'opening' => null,
-            'closing' => '30500',
+            'closing' => '13940',
+            'savings' => [
+                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '6'],
+                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '3'],
+                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '3'],
+            ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6600|3;Servicio de Luz|5400|5;Agua|4000|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|26000|2;Supermercado|15000|9',
@@ -72,7 +89,12 @@ class FakeBudgetSeeder extends Seeder
             'income' => '220000',
             'rate' => '800',
             'opening' => null,
-            'closing' => '46500',
+            'closing' => '25140',
+            'savings' => [
+                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '6'],
+                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '4'],
+                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '4'],
+            ],
             'rows' => [
                 'HOGAR' => 'Alquiler|130000|1;Servicio de Internet|6900|3;Servicio de Luz|6100|5;Agua|4300|7',
                 'ALIMENTACIÓN' => 'Mercado semanal|30000|2;Supermercado|15700|9',
@@ -93,7 +115,7 @@ class FakeBudgetSeeder extends Seeder
 
     public function run(): void
     {
-        $this->seedBackwardsFrom('2026-09');
+        $this->seedBackwardsFrom(config('budget.seed_month', '2026-09'));
     }
 
     public function seedBackwardsFrom(string $currentMonthId): void
@@ -114,9 +136,19 @@ class FakeBudgetSeeder extends Seeder
             $dynamicPlan[$monthId] = self::PLAN[$staticKeys[$index]];
         }
 
+        // Delete existing months
         Budget::whereIn('month_id', $months)
             ->each(fn (Budget $budget) => $budget->delete());
 
+        // Clean up child tables (FK enforcement is off in SQLite)
+        foreach ($months as $monthId) {
+            Expense::where('month_id', $monthId)->delete();
+            SavingTransaction::where('month_id', $monthId)->delete();
+            Debt::where('month_id', $monthId)->delete();
+            Category::where('month_id', $monthId)->delete();
+        }
+
+        // Seed each month
         foreach ($months as $index => $monthId) {
             $plan = $dynamicPlan[$monthId];
             $opening = $plan['opening'] ?? $this->previousClosing($months[$index - 1]);
@@ -168,7 +200,12 @@ class FakeBudgetSeeder extends Seeder
             ]);
         }
 
-        $calculated = app(BudgetService::class)->calculateBalance($budget->fresh(['expenses', 'categories']));
+        // Seed savings transactions
+        if (! empty($plan['savings'])) {
+            $this->seedSavings($monthId, $plan['savings'], $plan['rate']);
+        }
+
+        $calculated = app(BudgetService::class)->calculateBalance($budget->fresh(['expenses', 'categories', 'savingsTransactions']));
         if (bccomp($calculated, $plan['closing'], 2) !== 0) {
             throw new RuntimeException(sprintf(
                 'Demo month %s closes at %s but the plan declares %s.',
@@ -176,6 +213,24 @@ class FakeBudgetSeeder extends Seeder
                 $calculated,
                 $plan['closing']
             ));
+        }
+    }
+
+    private function seedSavings(string $monthId, array $savings, string $rate): void
+    {
+        foreach ($savings as $index => $saving) {
+            $timestamp = $this->timestampFor($monthId, 1 + $index * 7);
+
+            SavingTransaction::create([
+                'id' => (string) Str::uuid(),
+                'month_id' => $monthId,
+                'type' => $saving['type'],
+                'category' => $saving['category'],
+                'amount_usd' => $saving['amount_usd'],
+                'exchange_rate' => $rate,
+                'amount_bs' => bcmul($saving['amount_usd'], $rate, 2),
+                'timestamp' => $timestamp,
+            ]);
         }
     }
 

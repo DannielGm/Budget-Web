@@ -6,7 +6,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const user = usePage().props.auth?.user ?? null;
 
     return (
-        <div className="min-h-screen bg-[#FFFFFF] dark:bg-[#0D0D12] transition-colors pb-20">
+        <div className="min-h-screen bg-[#FFFFFF] dark:bg-[#0D0D12] transition-colors pb-20 overflow-x-hidden">
             {header && (
                 <header className="bg-[#FF8A3D] dark:bg-[#9B7BFF] shadow-lg sticky top-0 z-10 transition-colors pt-[env(safe-area-inset-top)]">
                     <div className="mx-auto max-w-lg h-16 flex items-center">
