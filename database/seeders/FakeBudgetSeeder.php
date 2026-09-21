@@ -138,7 +138,15 @@ class FakeBudgetSeeder extends Seeder
 
         // Delete existing months
         Budget::whereIn('month_id', $months)
-            ->each(fn (Budget $budget) => $budget->delete());
+            ->each(function (Budget $budget) {
+                $budget->expenses()->delete();
+                $budget->savingsTransactions()->delete();
+                $budget->debts()->each(fn ($d) => $d->payments()->delete());
+                $budget->debts()->delete();
+                $budget->categories()->delete();
+                $budget->transfers()->delete();
+                $budget->delete();
+            });
 
         // Clean up child tables (FK enforcement is off in SQLite)
         foreach ($months as $monthId) {
