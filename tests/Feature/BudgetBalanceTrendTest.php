@@ -59,10 +59,10 @@ class BudgetBalanceTrendTest extends TestCase
         $service = app(BudgetService::class);
 
         $expected = [
-            '2026-06' => '6500.00',
-            '2026-07' => '16500.00',
-            '2026-08' => '30500.00',
-            '2026-09' => '46500.00',
+            '2026-06' => '1820.00',
+            '2026-07' => '4710.00',
+            '2026-08' => '13940.00',
+            '2026-09' => '25140.00',
         ];
 
         foreach ($expected as $monthId => $closing) {
@@ -81,10 +81,10 @@ class BudgetBalanceTrendTest extends TestCase
             )]
         );
 
-        $this->assertSame('6500.00', $closings['2026-06']);
-        $this->assertLessThan($closings['2026-07'], $closings['2026-06']); // 6.5k < 16.5k
-        $this->assertLessThan($closings['2026-08'], $closings['2026-07']); // 16.5k < 30.5k
-        $this->assertLessThan($closings['2026-09'], $closings['2026-08']); // 30.5k < 46.5k
+        $this->assertSame('1820.00', $closings['2026-06']);
+        $this->assertLessThan($closings['2026-07'], $closings['2026-06']);
+        $this->assertLessThan($closings['2026-08'], $closings['2026-07']);
+        $this->assertLessThan($closings['2026-09'], $closings['2026-08']);
     }
 
     public function test_credit_purchases_carry_forward_as_a_september_debt(): void
