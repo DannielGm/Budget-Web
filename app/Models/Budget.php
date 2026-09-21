@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Str;
 
 class Budget extends Model
 {
@@ -42,6 +43,81 @@ class Budget extends Model
     public function transfers(): HasMany
     {
         return $this->hasMany(Transfer::class, 'month_id', 'month_id')->orderBy('timestamp', 'asc');
+    }
+
+    public const SAVINGS_POOLS = ['Digital', 'Bank', 'Physical'];
+
+    /**
+     * Canonical spelling for every accepted pool name. Legacy rows and the
+     * Spanish labels used across the UI map here so a pool can never be split
+     * in two (e.g. 'Banco' vs 'Bank').
+     */
+    public const SAVINGS_POOL_ALIASES = [
+        'binance' => 'Digital',
+        'digital' => 'Digital',
+        'banco' => 'Bank',
+        'bank' => 'Bank',
+        'fisico' => 'Physical',
+        'physical' => 'Physical',
+    ];
+
+    /** Resolve any pool spelling to its canonical name (null when empty). */
+    public static function normalizeSavingsPool(?string $value): ?string
+    {
+        if ($value === null || trim($value) === '') {
+            return null;
+        }
+
+        // Str::ascii strips the accent so 'Físico'/'Fisico' both match.
+        return self::SAVINGS_POOL_ALIASES[strtolower(Str::ascii(trim($value)))] ?? $value;
+    }
+
+    /**
+     * Independent per-pool savings balances (USD). Each pool aggregates its
+     * manual SavingTransactions plus Transfer legs that move money in or out
+     * of that pool (source_type/destination_type === 'saving').
+     */
+    public function getSavingsPoolsAttribute(): array
+    {
+        return once(function () {
+            $transactions = $this->savingsTransactions;
+            $transfers = $this->transfers;
+
+            return collect(self::SAVINGS_POOLS)->map(function (string $pool) use ($transactions, $transfers) {
+                $balance = '0';
+
+                foreach ($transactions as $t) {
+                    if (self::normalizeSavingsPool($t->category) !== $pool) {
+                        continue;
+                    }
+                    $balance = $t->type === 'deposit'
+                        ? bcadd($balance, $t->amount_usd, 2)
+                        : bcsub($balance, $t->amount_usd, 2);
+                }
+
+                foreach ($transfers as $tr) {
+                    if ($tr->destination_type === 'saving' && self::normalizeSavingsPool($tr->destination_id) === $pool) {
+                        $balance = bcadd($balance, (string) $tr->amount_usd, 2);
+                    }
+                    if ($tr->source_type === 'saving' && self::normalizeSavingsPool($tr->source_id) === $pool) {
+                        $balance = bcsub($balance, (string) $tr->amount_usd, 2);
+                    }
+                }
+
+                return ['name' => $pool, 'balance_usd' => $balance];
+            })->values()->all();
+        });
+    }
+
+    /** Total savings = the sum of the three independent pools. */
+    public function getTotalSavingsUsdAttribute(): string
+    {
+        $total = '0';
+        foreach ($this->savings_pools as $pool) {
+            $total = bcadd($total, $pool['balance_usd'], 2);
+        }
+
+        return $total;
     }
 
     public function getCashBsAttribute(): string
@@ -109,10 +185,8 @@ class Budget extends Model
     public function getTrueBudgetBsAttribute(): string
     {
         // True Budget = Available Balance + (Total Savings USD * Current BCV Rate)
-        $depositsUsd = (string) $this->savingsTransactions()->where('type', 'deposit')->sum('amount_usd');
-        $withdrawalsUsd = (string) $this->savingsTransactions()->where('type', 'withdrawal')->sum('amount_usd');
-        $totalSavingsUsd = bcsub($depositsUsd, $withdrawalsUsd, 2);
-        $savingsValueInBs = bcmul($totalSavingsUsd, $this->income_rate, 2);
+        $savingsValueInBs = bcmul($this->total_savings_usd, $this->income_rate, 2);
+
         return bcadd($this->available_balance_bs, $savingsValueInBs, 2);
     }
 

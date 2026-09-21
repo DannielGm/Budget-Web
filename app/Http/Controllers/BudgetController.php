@@ -46,8 +46,11 @@ class BudgetController extends Controller
                 'true_budget_bs',
                 'balance_bs',
                 'debt_bs',
+                'savings_pools',
+                'total_savings_usd',
             ]),
-            'savings' => Inertia::optional(fn () => $budget->savingsTransactions()->orderBy('timestamp', 'desc')->get()),
+
+            'savingsLedger' => fn () => $this->budgetService->savingsLedger($budget),
             'monthIds' => Budget::orderBy('month_id', 'desc')->pluck('month_id'),
             'version' => config('budget.version'),
             'rate' => $rateSnapshot,

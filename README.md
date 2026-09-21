@@ -18,7 +18,7 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 
 `database/data/september.private.json` contains real financial data. It is Git-ignored but **not encrypted**. The local SQLite database (`database/database.sqlite`) stores all sensitive information. Ensure this environment is kept private and secure.
 
-## Finished Phases
+## Finished Alphas
 
 ### alpha 0.0.1 — Initial Laravel + React Migration
 - Initialized the Laravel 11 project with the agent-optimized `--boost` flag.
@@ -74,14 +74,15 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - **Debt History**: Replaced static debt totals with individual payment tracking in a dedicated `debt_payments` table, viewable via a lazy-loaded Summary Modal.
 - **Backdated Payments**: Added calendar support to backdate debt payments explicitly.
 
-## Planned Phases
-
 ### alpha 0.2.7 — Reconcilable Transfer System & UI Polish
 - **Unified Transfer System**: Introduced a dedicated `transfers` table and model for moving funds between components (Cash, Bank, Binance) with full double-entry traceability.
 - **Budget Formula Recalibration**: Updated logic to calculate available balance using the unified transfers ledger, ensuring internal movements don't double-count or ghost funds.
 - **Debt UX Polish**: Simplified the Debt editor with a modern toggle switch for payments and automatic "Initial Payment" tracking in the history view.
 - **Category Integrity**: Standardized category types (Contado, Crédito, Presupuesto) with a mutually exclusive dropdown selector and strict budget formula isolation.
 - **Safety & Stability**: Fixed critical JavaScript crashes in the Debt and Category forms and resolved mass-assignment issues for presupuesto flags.
+
+## Planned Alphas
+
 
 ## Build and Current-Phase Checks
 

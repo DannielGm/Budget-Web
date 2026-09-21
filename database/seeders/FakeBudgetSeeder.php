@@ -37,9 +37,9 @@ class FakeBudgetSeeder extends Seeder
             'opening' => '45000',
             'closing' => '1820',
             'savings' => [
-                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '5'],
-                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '2'],
-                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '1'],
+                ['type' => 'deposit',    'category' => 'Digital', 'amount_usd' => '5'],
+                ['type' => 'deposit',    'category' => 'Bank',   'amount_usd' => '2'],
+                ['type' => 'withdrawal', 'category' => 'Physical',  'amount_usd' => '1'],
             ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|4200|5;Agua|3800|7',
@@ -54,9 +54,9 @@ class FakeBudgetSeeder extends Seeder
             'opening' => null,
             'closing' => '4710',
             'savings' => [
-                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '8'],
-                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '3'],
-                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '2'],
+                ['type' => 'deposit',    'category' => 'Digital', 'amount_usd' => '8'],
+                ['type' => 'deposit',    'category' => 'Bank',   'amount_usd' => '3'],
+                ['type' => 'withdrawal', 'category' => 'Physical',  'amount_usd' => '2'],
             ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6500|3;Servicio de Luz|5100|5;Agua|4000|7',
@@ -71,9 +71,9 @@ class FakeBudgetSeeder extends Seeder
             'opening' => null,
             'closing' => '13940',
             'savings' => [
-                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '6'],
-                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '3'],
-                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '3'],
+                ['type' => 'deposit',    'category' => 'Digital', 'amount_usd' => '6'],
+                ['type' => 'deposit',    'category' => 'Bank',   'amount_usd' => '3'],
+                ['type' => 'withdrawal', 'category' => 'Physical',  'amount_usd' => '3'],
             ],
             'rows' => [
                 'HOGAR' => 'Alquiler|120000|1;Servicio de Internet|6600|3;Servicio de Luz|5400|5;Agua|4000|7',
@@ -91,9 +91,9 @@ class FakeBudgetSeeder extends Seeder
             'opening' => null,
             'closing' => '25140',
             'savings' => [
-                ['type' => 'deposit',    'category' => 'Binance', 'amount_usd' => '6'],
-                ['type' => 'deposit',    'category' => 'Banco',   'amount_usd' => '4'],
-                ['type' => 'withdrawal', 'category' => 'Físico',  'amount_usd' => '4'],
+                ['type' => 'deposit',    'category' => 'Digital', 'amount_usd' => '6'],
+                ['type' => 'deposit',    'category' => 'Bank',   'amount_usd' => '4'],
+                ['type' => 'withdrawal', 'category' => 'Physical',  'amount_usd' => '4'],
             ],
             'rows' => [
                 'HOGAR' => 'Alquiler|130000|1;Servicio de Internet|6900|3;Servicio de Luz|6100|5;Agua|4300|7',

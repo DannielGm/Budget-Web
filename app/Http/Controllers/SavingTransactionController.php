@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Budget;
 use App\Models\SavingTransaction;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -18,6 +19,9 @@ class SavingTransactionController extends Controller
             'exchange_rate' => 'required|numeric|min:0',
             'timestamp' => 'nullable|integer',
         ]);
+
+        $validated['category'] = Budget::normalizeSavingsPool($validated['category']) ?? $validated['category'];
+
 
         $validated['id'] = (string) Str::uuid();
         if (!isset($validated['timestamp'])) {
@@ -40,6 +44,9 @@ class SavingTransactionController extends Controller
             'exchange_rate' => 'required|numeric|min:0',
             'timestamp' => 'required|integer',
         ]);
+
+        $validated['category'] = Budget::normalizeSavingsPool($validated['category']) ?? $validated['category'];
+
 
         $validated['amount_bs'] = bcmul($validated['amount_usd'], $validated['exchange_rate'], 2);
 

@@ -24,6 +24,8 @@ class BudgetService
                 'true_budget_bs',
                 'balance_bs',
                 'debt_bs',
+                'savings_pools',
+                'total_savings_usd',
             ]);
         }
         return $budget;
@@ -153,5 +155,52 @@ class BudgetService
         $month = (int) substr($monthId, 5, 2);
 
         return self::MONTH_NAMES[$month] ?? $monthId;
+    }
+
+       /**
+     * Unified savings ledger: manual transactions merged with savings-related
+     * transfers, chronologically sorted (latest first).
+     */
+    public function savingsLedger(Budget $budget): array
+    {
+        $entries = [];
+
+        foreach ($budget->savingsTransactions()->orderBy('timestamp', 'desc')->get() as $t) {
+            $entries[] = [
+                'id' => $t->id,
+                'kind' => 'transaction',
+                'type' => $t->type,
+                'pool' => Budget::normalizeSavingsPool($t->category) ?? $t->category,   // line 173
+                'amount_usd' => (string) $t->amount_usd,
+                'amount_bs' => (string) $t->amount_bs,
+                'exchange_rate' => (string) $t->exchange_rate,
+                'timestamp' => (int) $t->timestamp,
+            ];
+        }
+
+        foreach ($budget->transfers()->orderBy('timestamp', 'desc')->get() as $tr) {
+            $involvesSavings = $tr->source_type === 'saving' || $tr->destination_type === 'saving';
+            if (! $involvesSavings) {
+                continue;
+            }
+
+            $entries[] = [
+                'id' => $tr->id,
+                'kind' => 'transfer',
+                'source_type' => $tr->source_type,
+                'source_id' => Budget::normalizeSavingsPool($tr->source_id),            // line 191
+                'destination_type' => $tr->destination_type,
+                'destination_id' => Budget::normalizeSavingsPool($tr->destination_id),
+                'amount_usd' => (string) $tr->amount_usd,
+                'amount_bs' => (string) $tr->amount_bs,
+                'rate' => (string) $tr->rate,
+                'note' => $tr->note,
+                'timestamp' => (int) $tr->timestamp,
+            ];
+        }
+
+        usort($entries, fn ($a, $b) => $b['timestamp'] <=> $a['timestamp']);
+
+        return $entries;
     }
 }

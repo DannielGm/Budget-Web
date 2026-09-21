@@ -16,7 +16,7 @@ class SavingTransaction extends Model
         'id',
         'month_id',
         'type', // 'deposit' or 'withdrawal'
-        'category', // e.g. 'Binance', 'Bank', 'Physical'
+        'category', // e.g. 'Digital', 'Bank', 'Physical'
         'amount_usd',
         'exchange_rate',
         'amount_bs', // Calculated before save: amount_usd * exchange_rate

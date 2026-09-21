@@ -26,7 +26,7 @@ class SavingTransactionControllerTest extends TestCase
         $response = $this->actingAs($user)->post(route('savings.store'), [
             'month_id' => '2026-09',
             'type' => 'deposit',
-            'category' => 'Binance',
+            'category' => 'Digital',
             'amount_usd' => '50',
             'exchange_rate' => '40',
         ]);
@@ -36,7 +36,7 @@ class SavingTransactionControllerTest extends TestCase
         $this->assertDatabaseHas('savings_transactions', [
             'month_id' => '2026-09',
             'type' => 'deposit',
-            'category' => 'Binance',
+            'category' => 'Digital',
             'amount_usd' => '50.00',
             'exchange_rate' => '40.00',
             'amount_bs' => '2000.00',
@@ -65,7 +65,7 @@ class SavingTransactionControllerTest extends TestCase
             'id' => 'test-uuid',
             'month_id' => '2026-09',
             'type' => 'deposit',
-            'category' => 'Binance',
+            'category' => 'Digital',
             'amount_usd' => '50',
             'exchange_rate' => '40',
             'amount_bs' => '2000',

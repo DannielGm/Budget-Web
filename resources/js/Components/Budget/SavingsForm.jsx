@@ -5,13 +5,14 @@ import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
-import { useForm } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
+import { Trash2 } from 'lucide-react';
 
 export default function SavingsForm({ show, onClose, transaction = null, monthId, defaultRate }) {
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         month_id: monthId,
         type: transaction?.type || 'deposit',
-        category: transaction?.category || 'Binance',
+        category: transaction?.category || 'Digital',
         amount_usd: transaction?.amount_usd || '',
         exchange_rate: transaction?.exchange_rate || defaultRate || '',
         timestamp: transaction?.timestamp || Date.now(),
@@ -60,12 +61,37 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
         onClose();
     };
 
+        const handleDelete = () => {
+        if (window.confirm('¿Estás seguro de eliminar este movimiento de ahorro?')) {
+            router.delete(route('savings.destroy', transaction.id), {
+                preserveScroll: true,
+                onSuccess: () => {
+                    reset();
+                    onClose();
+                },
+            });
+        }
+    };
+
+
     return (
         <Modal show={show} onClose={handleClose} maxWidth="md">
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {transaction ? 'Editar Ahorro' : 'Nuevo Ahorro'}
-                </h2>
+                <div className="flex items-center gap-3 mb-4">
+                    {transaction && (
+                        <button
+                            type="button"
+                            onClick={handleDelete}
+                            title="Eliminar operación"
+                            className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                        >
+                            <Trash2 size={18} />
+                        </button>
+                    )}
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
+                        {transaction ? 'Editar Ahorro' : 'Nuevo Ahorro'}
+                    </h2>
+                </div>
 
                 <div className="space-y-4">
                     <div>
@@ -97,7 +123,7 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                             onChange={(e) => setData('category', e.target.value)}
                             className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
                         >
-                            <option value="Binance">Binance</option>
+                            <option value="Digital">Digital</option>
                             <option value="Bank">Banco</option>
                             <option value="Physical">Físico</option>
                         </select>

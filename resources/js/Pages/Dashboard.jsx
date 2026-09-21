@@ -13,12 +13,13 @@ import SavingsDashboard from '@/Components/Budget/SavingsDashboard';
 import SavingsForm from '@/Components/Budget/SavingsForm';
 import TransferModal from '@/Components/Budget/TransferModal';
 import Dropdown from '@/Components/Dropdown';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet, ArrowRightLeft } from 'lucide-react';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet,} from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
+const SavingsPoolSummaryModal = lazy(() => import('@/Components/Budget/SavingsPoolSummaryModal'));
 
 const MONTH_SHORT = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -77,7 +78,7 @@ function sameDay(timestampMs, dateIso) {
 
 export default function Dashboard() {
     const {
-        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate,
+        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger,
     } = usePage().props;
 
     const [isDark, setIsDark] = useState(false);
@@ -98,6 +99,11 @@ export default function Dashboard() {
     const [showCategoryAccordion, setShowCategoryAccordion] = useState(false);
     const [showDebtSummary, setShowDebtSummary] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
+    const [editingTransfer, setEditingTransfer] = useState(null);
+    const [selectedPool, setSelectedPool] = useState(null);
+    const [movementPool, setMovementPool] = useState(null);
+
+
 
     // View state for swipeable dashboard (0 = Main, 1 = Savings)
     const [currentViewIndex, setCurrentViewIndex] = useState(0);
@@ -275,13 +281,6 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
-                        <button
-                            onClick={() => setShowTransferModal(true)}
-                            className="p-2 text-white hover:bg-white/10 rounded-full transition-all"
-                            title="Transferir fondos"
-                        >
-                            <ArrowRightLeft size={20} />
-                        </button>
 
                         <button
                             onClick={() => {
@@ -617,12 +616,16 @@ export default function Dashboard() {
                             onDragEnd={handleDragEnd}
                             className="absolute w-full pr-8 space-y-6 pb-24"
                         >
-                            <SavingsDashboard
+                             <SavingsDashboard
                                 budget={budget}
+                                savingsLedger={savingsLedger || []}
+                                onSelectPool={(poolName) => setSelectedPool(poolName)}
+                                onEditTransfer={(t) => setEditingTransfer(t)}
                                 onAddSaving={(transaction) => {
                                     setEditingSaving(transaction);
                                     setShowSavingsModal(true);
                                 }}
+                                onTransfer={() => setShowTransferModal(true)}
                             />
 
                             <footer className="text-center pb-8">
@@ -701,14 +704,39 @@ export default function Dashboard() {
                         currentRate={budget.income_rate}
                     />
                 )}
+                                {selectedPool && (
+                    <SavingsPoolSummaryModal
+                        show={selectedPool !== null}
+                        onClose={() => setSelectedPool(null)}
+                        pool={selectedPool}
+                        pools={budget.savings_pools || []}
+                        savingsLedger={savingsLedger || []}
+                        currentRate={budget.income_rate}
+                        onAddMovement={(poolName) => setMovementPool(poolName)}
+                        onEditMovement={(t) => {
+                            setSelectedPool(null);
+                            if (t.kind === 'transfer') {
+                                setEditingTransfer(t);
+                            } else {
+                                setEditingSaving({ ...t, category: t.pool });
+                                setShowSavingsModal(true);
+                            }
+                        }}
+                    />
+                )}
+
             </Suspense>
 
             <TransferModal
-                show={showTransferModal}
-                onClose={() => setShowTransferModal(false)}
+                show={showTransferModal || editingTransfer !== null || movementPool !== null}
+                onClose={() => {
+                    setShowTransferModal(false);
+                    setEditingTransfer(null);
+                    setMovementPool(null);
+                }}
                 monthId={budget.month_id}
-                defaultRate={budget.income_rate}
-                categories={budget.categories}
+                transfer={editingTransfer}
+                pool={movementPool}
             />
 
             {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}

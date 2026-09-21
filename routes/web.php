@@ -43,6 +43,10 @@ Route::patch('/savings/{transaction}', [SavingTransactionController::class, 'upd
 Route::post('/transfers', [TransferController::class, 'store'])->name('transfers.store');
 Route::delete('/savings/{transaction}', [SavingTransactionController::class, 'destroy'])->name('savings.destroy');
 
+Route::patch('/transfers/{transfer}', [TransferController::class, 'update'])->name('transfers.update');
+Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->name('transfers.destroy');
+
+
 Route::get('/export', [ExportController::class, 'export'])->name('export');
 Route::post('/import', [ExportController::class, 'import'])->name('import');
 
