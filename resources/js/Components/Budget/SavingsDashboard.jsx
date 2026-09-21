@@ -133,10 +133,10 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                 </div>
                                 <div className="text-right">
                                     <p className="font-black text-sm text-blue-600 dark:text-blue-400">
-                                        Bs {parseFloat(t.amount_bs || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                        $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                     </p>
                                     <p className="text-[10px] text-gray-400 font-bold">
-                                        $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                        {parseFloat(t.rate || 0).toLocaleString('es-ES')} Bs/$
                                     </p>
                                 </div>
                             </div>
