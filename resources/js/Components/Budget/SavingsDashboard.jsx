@@ -136,7 +136,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                         Bs {parseFloat(t.amount_bs || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                     </p>
                                     <p className="text-[10px] text-gray-400 font-bold">
-                                        {parseFloat(t.rate || 0).toLocaleString('es-ES')} Bs/$
+                                        $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                     </p>
                                 </div>
                             </div>

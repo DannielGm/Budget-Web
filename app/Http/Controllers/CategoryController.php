@@ -44,6 +44,7 @@ class CategoryController extends Controller
 
     public function destroy(Category $category)
     {
+        $category->expenses()->delete();
         $category->delete();
         return back();
     }

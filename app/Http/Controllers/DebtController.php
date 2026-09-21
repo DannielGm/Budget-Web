@@ -69,6 +69,12 @@ class DebtController extends Controller
         return back();
     }
 
+    public function destroy(Debt $debt)
+    {
+        $debt->delete();
+        return back();
+    }
+
     public function destroyPayment(\App\Models\DebtPayment $payment)
     {
         // Subtract the payment amount from the total debt payment

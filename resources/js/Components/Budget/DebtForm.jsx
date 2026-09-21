@@ -87,6 +87,14 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         }
     };
 
+    const handleDeleteDebt = () => {
+        if (confirm(`¿Estás seguro de eliminar la deuda "${debt.label}" y TODOS sus pagos?`)) {
+            router.delete(route('debts.destroy', debt.id), {
+                onSuccess: () => onClose(),
+            });
+        }
+    };
+
     const handleDeletePayment = (paymentId) => {
         if (confirm("¿Borrar este pago?")) {
             router.delete(route('debt-payments.destroy', paymentId), { preserveScroll: true });
@@ -274,13 +282,25 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                     )}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
-                    <SecondaryButton onClick={handleClose} className="dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
-                        Cancelar
-                    </SecondaryButton>
-                    <PrimaryButton className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                        {debt ? 'Actualizar Pago' : 'Crear Deuda'}
-                    </PrimaryButton>
+                <div className="mt-8 flex justify-between gap-3">
+                    {debt ? (
+                        <button
+                            type="button"
+                            onClick={handleDeleteDebt}
+                            className="text-red-500 hover:text-red-700 text-sm font-bold transition-colors"
+                        >
+                            Eliminar Deuda
+                        </button>
+                    ) : <div></div>}
+
+                    <div className="flex gap-3">
+                        <SecondaryButton onClick={handleClose} className="dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+                            Cancelar
+                        </SecondaryButton>
+                        <PrimaryButton className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
+                            {debt ? 'Actualizar Pago' : 'Crear Deuda'}
+                        </PrimaryButton>
+                    </div>
                 </div>
             </form>
 
