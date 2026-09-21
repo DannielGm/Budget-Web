@@ -133,15 +133,23 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
                     {debt ? (
                         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-                            <div className="flex items-center gap-2 mb-3">
-                                <input
-                                    type="checkbox"
-                                    id="additiveDebt"
-                                    checked={isAdditive}
-                                    onChange={(e) => setIsAdditive(e.target.checked)}
-                                    className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                                />
-                                <InputLabel htmlFor="additiveDebt" value={`Registrar nuevo pago (Total actual: Bs ${parseFloat(debt.payment_bs).toLocaleString('es-ES')})`} className="dark:text-gray-300 cursor-pointer" />
+                            <div className="flex items-center justify-between mb-3">
+                                <InputLabel value={`Registrar nuevo pago (Total actual: Bs ${parseFloat(debt.payment_bs).toLocaleString('es-ES')})`} className="dark:text-gray-300" />
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAdditive(!isAdditive)}
+                                    className={cn(
+                                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
+                                        isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
+                                    )}
+                                >
+                                    <span
+                                        className={cn(
+                                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                            isAdditive ? "translate-x-5" : "translate-x-0"
+                                        )}
+                                    />
+                                </button>
                             </div>
 
                             {isAdditive ? (
@@ -211,7 +219,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
                     <div>
                         <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
-                            Restante: Bs {data.opening_bs && (isAdditive ? (parseFloat(data.opening_bs) - parseFloat(debt.payment_bs) - (parseFloat(additiveAmount)||0)) : (parseFloat(data.opening_bs) - parseFloat(data.payment_bs))) ? (parseFloat(data.opening_bs) - (isAdditive ? (parseFloat(debt.payment_bs) + (parseFloat(additiveAmount)||0)) : parseFloat(data.payment_bs))).toLocaleString('es-ES') : '0.00'}
+                            Restante: Bs {data.opening_bs && (isAdditive ? (parseFloat(data.opening_bs) - parseFloat(debt?.payment_bs || 0) - (parseFloat(additiveAmount)||0)) : (parseFloat(data.opening_bs) - parseFloat(data.payment_bs))) ? (parseFloat(data.opening_bs) - (isAdditive ? (parseFloat(debt?.payment_bs || 0) + (parseFloat(additiveAmount)||0)) : parseFloat(data.payment_bs))).toLocaleString('es-ES') : '0.00'}
                         </p>
                     </div>
 

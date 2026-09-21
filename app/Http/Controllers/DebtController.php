@@ -21,7 +21,17 @@ class DebtController extends Controller
 
         $validated['position'] = $maxPosition + 1;
 
-        Debt::create($validated);
+        $debt = Debt::create($validated);
+
+        if ($validated['payment_bs'] > 0) {
+            \App\Models\DebtPayment::create([
+                'id' => (string) \Illuminate\Support\Str::uuid(),
+                'debt_id' => $debt->id,
+                'amount_bs' => $validated['payment_bs'],
+                'method' => 'Inicial',
+                'timestamp' => (int) (microtime(true) * 1000),
+            ]);
+        }
 
         return back();
     }

@@ -11,7 +11,7 @@ class BudgetService
 {
     public function getBudget(string $monthId): ?Budget
     {
-        $budget = Budget::with(['categories', 'expenses', 'debts', 'debts.payments'])->find($monthId);
+        $budget = Budget::with(['categories', 'expenses', 'debts', 'debts.payments', 'transfers'])->find($monthId);
         if ($budget) {
             // Append dynamic attributes for JSON serialization
             $budget->append([
@@ -134,6 +134,7 @@ class BudgetService
 
         $budget->expenses()->whereBetween('timestamp', [$start, $end])->delete();
         $budget->savingsTransactions()->whereBetween('timestamp', [$start, $end])->delete();
+        $budget->transfers()->whereBetween('timestamp', [$start, $end])->delete();
 
         foreach ($budget->debts as $debt) {
             $debt->payments()->whereBetween('timestamp', [$start, $end])->delete();

@@ -8,28 +8,32 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router } from '@inertiajs/react';
 
 export default function CategoryForm({ show, onClose, category, monthId }) {
-    const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         name: category?.name || '',
         month_id: monthId,
-        cash_expense: category?.cash_expense ?? true,
-        is_presupuesto: category?.is_presupuesto ?? false,
+        type: category?.is_presupuesto ? 'presupuesto' : (category?.cash_expense ? 'contado' : 'credito'),
     });
+
+    transform((data) => ({
+        name: data.name,
+        month_id: data.month_id,
+        cash_expense: data.type === 'contado',
+        is_presupuesto: data.type === 'presupuesto',
+    }));
 
     useEffect(() => {
         if (show && category) {
             setData({
                 name: category.name,
                 month_id: monthId,
-                cash_expense: category.cash_expense,
-                is_presupuesto: category.is_presupuesto,
+                type: category.is_presupuesto ? 'presupuesto' : (category.cash_expense ? 'contado' : 'credito'),
             });
         } else if (show && !category) {
             reset();
             setData('month_id', monthId);
-            setData('cash_expense', true);
-            setData('is_presupuesto', false);
+            setData('type', 'contado');
         }
-    }, [show, category]);
+    }, [show, category, monthId]);
 
     const submit = (e) => {
         e.preventDefault();
@@ -80,29 +84,50 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                         <InputError message={errors.name} className="mt-2" />
                     </div>
 
-                    <div className="flex items-center gap-2 mt-4">
-                        <input
-                            type="checkbox"
-                            id="cash_expense"
-                            checked={data.cash_expense}
-                            onChange={(e) => setData('cash_expense', e.target.checked)}
-                            className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                        />
-                        <InputLabel htmlFor="cash_expense" value="Gasto de contado (Resta del saldo)" className="dark:text-gray-300 cursor-pointer" />
-                    </div>
+                    <div className="space-y-3 mt-4">
+                        <InputLabel value="Tipo de Categoría" className="dark:text-gray-300" />
 
-                    {!category && (
-                        <div className="flex items-center gap-2 mt-4">
+                        <div className="flex items-center gap-2">
                             <input
-                                type="checkbox"
-                                id="is_presupuesto"
-                                checked={data.is_presupuesto}
-                                onChange={(e) => setData('is_presupuesto', e.target.checked)}
-                                className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
+                                type="radio"
+                                id="type_contado"
+                                name="category_type"
+                                value="contado"
+                                checked={data.type === 'contado'}
+                                onChange={(e) => setData('type', e.target.value)}
+                                className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
                             />
-                            <InputLabel htmlFor="is_presupuesto" value="Categoría de Presupuesto (Solo planificación, no resta del saldo real)" className="dark:text-gray-300 cursor-pointer" />
+                            <InputLabel htmlFor="type_contado" value="Gasto de contado (Resta del saldo disponible)" className="dark:text-gray-300 cursor-pointer" />
                         </div>
-                    )}
+
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="radio"
+                                id="type_credito"
+                                name="category_type"
+                                value="credito"
+                                checked={data.type === 'credito'}
+                                onChange={(e) => setData('type', e.target.value)}
+                                className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
+                            />
+                            <InputLabel htmlFor="type_credito" value="Compra a crédito (Se suma a deudas)" className="dark:text-gray-300 cursor-pointer" />
+                        </div>
+
+                        {!category && (
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="radio"
+                                    id="type_presupuesto"
+                                    name="category_type"
+                                    value="presupuesto"
+                                    checked={data.type === 'presupuesto'}
+                                    onChange={(e) => setData('type', e.target.value)}
+                                    className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
+                                />
+                                <InputLabel htmlFor="type_presupuesto" value="Presupuesto (Solo planificación, no altera el balance)" className="dark:text-gray-300 cursor-pointer" />
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <div className="mt-8 flex justify-between gap-3">

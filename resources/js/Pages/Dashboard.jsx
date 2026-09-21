@@ -11,8 +11,9 @@ import CategoryAccordion from '@/Components/Budget/CategoryAccordion';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import SavingsDashboard from '@/Components/Budget/SavingsDashboard';
 import SavingsForm from '@/Components/Budget/SavingsForm';
+import TransferModal from '@/Components/Budget/TransferModal';
 import Dropdown from '@/Components/Dropdown';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet } from 'lucide-react';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet, ArrowRightLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -96,6 +97,7 @@ export default function Dashboard() {
     const [editingSaving, setEditingSaving] = useState(null);
     const [showCategoryAccordion, setShowCategoryAccordion] = useState(false);
     const [showDebtSummary, setShowDebtSummary] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
 
     // View state for swipeable dashboard (0 = Main, 1 = Savings)
     const [currentViewIndex, setCurrentViewIndex] = useState(0);
@@ -264,6 +266,14 @@ export default function Dashboard() {
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
+                        <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="p-2 text-white hover:bg-white/10 rounded-full transition-all"
+                            title="Transferir fondos"
+                        >
+                            <ArrowRightLeft size={20} />
+                        </button>
+
                         <button
                             onClick={() => {
                                 setDirection(currentViewIndex === 0 ? 1 : -1);
@@ -683,6 +693,14 @@ export default function Dashboard() {
                     />
                 )}
             </Suspense>
+
+            <TransferModal
+                show={showTransferModal}
+                onClose={() => setShowTransferModal(false)}
+                monthId={budget.month_id}
+                defaultRate={budget.income_rate}
+                categories={budget.categories}
+            />
 
             {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}
             <BudgetCalendar

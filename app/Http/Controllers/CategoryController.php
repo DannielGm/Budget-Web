@@ -29,6 +29,7 @@ class CategoryController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'cash_expense' => 'sometimes|boolean',
+            'is_presupuesto' => 'sometimes|boolean',
         ]);
 
         // If name changes, we need to update all associated expenses
