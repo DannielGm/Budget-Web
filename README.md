@@ -77,12 +77,20 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 ### alpha 0.2.7 — Reconcilable Transfer System & UI Polish
 - **Unified Transfer System**: Introduced a dedicated `transfers` table and model for moving funds between components (Cash, Bank, Binance) with full double-entry traceability.
 - **Budget Formula Recalibration**: Updated logic to calculate available balance using the unified transfers ledger, ensuring internal movements don't double-count or ghost funds.
-- **Debt UX Polish**: Simplified the Debt editor with a modern toggle switch for payments and automatic "Initial Payment" tracking in the history view.
-- **Category Integrity**: Standardized category types (Contado, Crédito, Presupuesto) with a mutually exclusive dropdown selector and strict budget formula isolation.
+- **Debt UX Polish**: Simplified the Debt editor with a modern toggle switch for payments and automatic "Initial Payment" tracking in the history view. Added wholesale debt deletion that cascades to remove all associated payments.
+- **Category Integrity**: Standardized category types (Contado, Crédito, Presupuesto) with a mutually exclusive dropdown selector, strict budget formula isolation, and cascade deletion for orphaned expenses.
 - **Safety & Stability**: Fixed critical JavaScript crashes in the Debt and Category forms and resolved mass-assignment issues for presupuesto flags.
+
+### alpha 0.2.8 — Savings Dashboard & Digital Transfers
+- **Digital Branding**: Fully rebranded "Binance" to "Digital" across the UI and Database (using live migrations).
+- **Independent Pool Tracking**: Refactored the core budget formulas to track Digital, Bank, and Physical savings as truly independent ledgers.
+- **Unified Savings Ledger**: Merged direct manual saving deposits/withdrawals with cross-app `Transfers` into a single, chronological timeline.
+- **Pool Summary Modal**: Added dedicated tracking modals for each specific pool to view targeted deposit/withdrawal histories.
+- **Transfer Shortcuts**: Integrated a quick-transfer floating button directly into the Savings Dashboard.
 
 ## Planned Alphas
 
+### alpha 0.2.9 — 
 
 ## Build and Current-Phase Checks
 

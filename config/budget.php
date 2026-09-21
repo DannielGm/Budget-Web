@@ -1,6 +1,6 @@
 <?php
 
 return [
-    'version' => 'alpha 0.2.7',
+    'version' => 'alpha 0.2.9',
     'seed_month' => '2026-09',
 ];
