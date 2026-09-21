@@ -8,12 +8,24 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { useForm, router } from '@inertiajs/react';
 import { ChevronDown, ChevronUp, Trash2, Calendar as CalendarIcon } from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}
 
 const pad = (n) => String(n).padStart(2, '0');
 
 function formatTimestamp(ms) {
-    const d = new Date(ms);
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getFullYear())}`;
+    if (!ms) return '--/--/----';
+    try {
+        const d = new Date(ms);
+        if (isNaN(d.getTime())) return '--/--/----';
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${d.getFullYear()}`;
+    } catch (e) {
+        return '--/--/----';
+    }
 }
 
 export default function DebtForm({ show, onClose, debt = null, monthId }) {
@@ -95,7 +107,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         }
 
         if (isAdditive) {
-            const currentPayment = parseFloat(debt.payment_bs) || 0;
+            const currentPayment = parseFloat(debt?.payment_bs || 0);
             const additive = parseFloat(additiveAmount) || 0;
             return opening - currentPayment - additive;
         } else {
@@ -153,26 +165,33 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                     {debt ? (
                         <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
                             <div className="flex items-center justify-between mb-3">
-                                <InputLabel value={`Registrar nuevo pago (Total actual: Bs ${parseFloat(debt.payment_bs).toLocaleString('es-ES')})`} className="dark:text-gray-300" />
-                                <button
-                                    type="button"
-                                    onClick={() => setIsAdditive(!isAdditive)}
-                                    className={cn(
-                                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
-                                        isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
+                                <InputLabel value={isAdditive ? "Registrar nuevo pago" : "Pago inicial"} className="dark:text-gray-300 font-bold" />
+                                <div className="flex items-center gap-3">
+                                    { !isAdditive && (
+                                        <span className="text-xs font-black dark:text-white">
+                                            Bs {parseFloat(debt.payment_bs || 0).toLocaleString('es-ES')}
+                                        </span>
                                     )}
-                                >
-                                    <span
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAdditive(!isAdditive)}
                                         className={cn(
-                                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                                            isAdditive ? "translate-x-5" : "translate-x-0"
+                                            "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
+                                            isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
                                         )}
-                                    />
-                                </button>
+                                    >
+                                        <span
+                                            className={cn(
+                                                "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                                isAdditive ? "translate-x-5" : "translate-x-0"
+                                            )}
+                                        />
+                                    </button>
+                                </div>
                             </div>
 
-                            {isAdditive ? (
-                                <div className="space-y-3">
+                            {isAdditive && (
+                                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                                     <TextInput
                                         id="additiveAmount"
                                         type="number"
@@ -184,17 +203,9 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                                         required
                                     />
                                     <div className="flex gap-2">
-                                        <select
-                                            value={additiveMethod}
-                                            onChange={(e) => setAdditiveMethod(e.target.value)}
-                                            className="block flex-1 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
-                                        >
-                                            <option value="Transferencia">Transferencia</option>
-                                            <option value="Pago Móvil">Pago Móvil</option>
-                                            <option value="Efectivo Bs">Efectivo Bs</option>
-                                            <option value="Efectivo USD">Efectivo USD</option>
-                                            <option value="Binance">Binance</option>
-                                        </select>
+                                        <div className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-gray-500 text-sm flex items-center">
+                                            Disponible (Caja)
+                                        </div>
                                         <button
                                             type="button"
                                             onClick={() => setShowDatePicker(true)}
@@ -206,17 +217,6 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                                         </button>
                                     </div>
                                 </div>
-                            ) : (
-                                <TextInput
-                                    id="payment_bs"
-                                    type="number"
-                                    step="0.01"
-                                    name="payment_bs"
-                                    value={data.payment_bs}
-                                    className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                    onChange={(e) => setData('payment_bs', e.target.value)}
-                                    required
-                                />
                             )}
                         </div>
                     ) : (

@@ -8,13 +8,13 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-export default function DebtSummaryModal({ show, onClose, debts, currentRate }) {
-    const allPayments = debts.reduce((acc, debt) => {
+export default function DebtSummaryModal({ show, onClose, debts = [], currentRate }) {
+    const allPayments = (debts || []).reduce((acc, debt) => {
         const payments = debt.payments || [];
         return acc.concat(payments.map(p => ({ ...p, debtLabel: debt.label })));
-    }, []).sort((a, b) => b.timestamp - a.timestamp);
+    }, []).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    const totalRemaining = debts.reduce((sum, d) => sum + (parseFloat(d.opening_bs) - parseFloat(d.payment_bs)), 0);
+    const totalRemaining = (debts || []).reduce((sum, d) => sum + (parseFloat(d.opening_bs || 0) - parseFloat(d.payment_bs || 0)), 0);
 
     return (
         <Modal show={show} onClose={onClose} maxWidth="sm">

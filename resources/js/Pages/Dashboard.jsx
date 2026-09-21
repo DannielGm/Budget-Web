@@ -194,11 +194,20 @@ export default function Dashboard() {
         setShowDebtModal(true);
     };
 
-    const creditPurchasesBs = budget.categories
-        .filter(c => !c.cash_expense)
-        .reduce((sum, c) => sum + budget.expenses.filter(e => e.category_name === c.name).reduce((s, e) => s + parseFloat(e.amount_bs), 0), 0);
+    const creditPurchasesBs = (budget.categories || [])
+        .filter(c => !c.cash_expense && !c.is_presupuesto)
+        .reduce((sum, c) => sum + (budget.expenses || []).filter(e => e.category_name === c.name).reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0), 0);
 
-    const totalDebtBs = budget.debts.reduce((sum, d) => sum + (parseFloat(d.opening_bs) - parseFloat(d.payment_bs)), 0) + creditPurchasesBs;
+    const totalDebtBs = (budget.debts || []).reduce((sum, d) => sum + (parseFloat(d.opening_bs || 0) - parseFloat(d.payment_bs || 0)), 0) + creditPurchasesBs;
+
+    const totalPresupuestoBs = (budget.categories || [])
+        .filter(c => c.is_presupuesto)
+        .reduce((sum, c) => {
+            const catExpenses = (budget.expenses || []).filter(e => e.category_name === c.name);
+            return sum + catExpenses.reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0);
+        }, 0);
+
+    const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuestoBs;
 
     const swipeVariants = {
         enter: (direction) => {

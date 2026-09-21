@@ -8,30 +8,42 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router } from '@inertiajs/react';
 
 export default function CategoryForm({ show, onClose, category, monthId }) {
-    const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
+    const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         name: category?.name || '',
         month_id: monthId,
-        type: category?.is_presupuesto ? 'presupuesto' : (category?.cash_expense ? 'contado' : 'credito'),
+        cash_expense: category?.cash_expense ?? true,
+        is_presupuesto: category?.is_presupuesto ?? false,
     });
 
-    transform((data) => ({
-        name: data.name,
-        month_id: data.month_id,
-        cash_expense: data.type === 'contado',
-        is_presupuesto: data.type === 'presupuesto',
-    }));
+    // We compute 'type' based on the booleans
+    const currentType = data.is_presupuesto ? 'presupuesto' : (data.cash_expense ? 'contado' : 'credito');
+
+    const handleTypeChange = (type) => {
+        if (type === 'contado') {
+            setData(d => ({ ...d, cash_expense: true, is_presupuesto: false }));
+        } else if (type === 'credito') {
+            setData(d => ({ ...d, cash_expense: false, is_presupuesto: false }));
+        } else if (type === 'presupuesto') {
+            setData(d => ({ ...d, cash_expense: true, is_presupuesto: true }));
+        }
+    };
 
     useEffect(() => {
         if (show && category) {
             setData({
                 name: category.name,
                 month_id: monthId,
-                type: category.is_presupuesto ? 'presupuesto' : (category.cash_expense ? 'contado' : 'credito'),
+                cash_expense: category.cash_expense,
+                is_presupuesto: category.is_presupuesto,
             });
         } else if (show && !category) {
             reset();
-            setData('month_id', monthId);
-            setData('type', 'contado');
+            setData({
+                name: '',
+                month_id: monthId,
+                cash_expense: true,
+                is_presupuesto: false,
+            });
         }
     }, [show, category, monthId]);
 
@@ -87,46 +99,17 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                     <div className="space-y-3 mt-4">
                         <InputLabel value="Tipo de Categoría" className="dark:text-gray-300" />
 
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="radio"
-                                id="type_contado"
-                                name="category_type"
-                                value="contado"
-                                checked={data.type === 'contado'}
-                                onChange={(e) => setData('type', e.target.value)}
-                                className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                            />
-                            <InputLabel htmlFor="type_contado" value="Gasto de contado (Resta del saldo disponible)" className="dark:text-gray-300 cursor-pointer" />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="radio"
-                                id="type_credito"
-                                name="category_type"
-                                value="credito"
-                                checked={data.type === 'credito'}
-                                onChange={(e) => setData('type', e.target.value)}
-                                className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                            />
-                            <InputLabel htmlFor="type_credito" value="Compra a crédito (Se suma a deudas)" className="dark:text-gray-300 cursor-pointer" />
-                        </div>
-
-                        {!category && (
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="radio"
-                                    id="type_presupuesto"
-                                    name="category_type"
-                                    value="presupuesto"
-                                    checked={data.type === 'presupuesto'}
-                                    onChange={(e) => setData('type', e.target.value)}
-                                    className="dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                                />
-                                <InputLabel htmlFor="type_presupuesto" value="Presupuesto (Solo planificación, no altera el balance)" className="dark:text-gray-300 cursor-pointer" />
-                            </div>
-                        )}
+                        <select
+                            value={currentType}
+                            onChange={(e) => handleTypeChange(e.target.value)}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF8A3D] focus:ring-[#FF8A3D] dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
+                        >
+                            <option value="contado">Gasto de contado (Resta del saldo disponible)</option>
+                            <option value="credito">Compra a crédito (Se suma a deudas)</option>
+                            {!category && (
+                                <option value="presupuesto">Presupuesto (Solo planificación, no altera el balance)</option>
+                            )}
+                        </select>
                     </div>
                 </div>
 
