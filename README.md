@@ -59,20 +59,24 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - Refactored the dashboard to feature a Framer Motion-powered swipeable dual-view (Budget / Savings).
 - Added interactive history and logging modals for deposits and withdrawals.
 
-### alpha 0.2.5 — Performance, UI Polish & Graphing
-- **Performance Optimizations**: Drastically reduced load times by muting NativePHP's JumpBridge off-device, lazy-loading savings ledgers via Inertia, memoising Budget aggregates, and optimizing BCV API caching.
+### alpha 0.2.5 — UI Polish, Graphing & Presupuesto Thresholds
 - **Advanced Graphing**: Multi-metric "Flujo" graph tracking Available Budget, Expenses, and Savings.
 - **Presupuesto Threshold**: Dotted threshold line on charts with dynamic green/red color coding based on affordability.
 - **Planning Categories**: Reworked category logic where `is_presupuesto` flag enables planning without affecting real cash balance.
-- **Category Accordion**: Modern accordion dialog for quick category switching, creation, and deletion.
 - **Additive Transactions**: Re-implemented "Add to current" logic for Incomes and Debt payments.
-- **Debt History**: Individual payment tracking with a full viewable/deletable history log.
 - **Historical Rates**: Calendar-based historical BCV rate picker for budget configuration.
 - **Dynamic Mockups**: Improved seeder to generate 4-month trends (3 up, 1 down) from any starting month.
 
+### alpha 0.2.6 — Performance & UX Overhaul
+- **Performance Optimizations**: Drastically reduced load times (from ~2.5s to ~0.40s) by muting NativePHP's JumpBridge off-device, lazy-loading savings ledgers via `Inertia::optional()`, memoising Budget aggregates, and optimizing BCV API caching with resilient timeouts.
+- **Category Accordion**: Replaced static category badges with a modern accordion dialog for quick category switching, creation, editing, and deletion.
+- **Smart Category Bar**: Added a contextual, floating category quick-switch bar powered by `framer-motion` and `IntersectionObserver` that only slides into view when scrolling through expenses.
+- **Debt History**: Replaced static debt totals with individual payment tracking in a dedicated `debt_payments` table, viewable via a lazy-loaded Summary Modal.
+- **Backdated Payments**: Added calendar support to backdate debt payments explicitly.
+
 ## Planned Phases
 
-### alpha 0.3.0 — 
+### alpha 0.2.7 — 
 - *To be determined*
 
 ## Build and Current-Phase Checks
