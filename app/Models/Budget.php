@@ -39,6 +39,11 @@ class Budget extends Model
         return $this->hasMany(SavingTransaction::class, 'month_id', 'month_id')->orderBy('timestamp', 'asc');
     }
 
+    public function transfers(): HasMany
+    {
+        return $this->hasMany(Transfer::class, 'month_id', 'month_id')->orderBy('timestamp', 'asc');
+    }
+
     public function getCashBsAttribute(): string
     {
         return once(fn() => (string) $this->expenses()
@@ -83,12 +88,19 @@ class Budget extends Model
 
     public function getAvailableBalanceBsAttribute(): string
     {
-        // Available Budget = Opening + Income - CashExpenses - DebtPayments - TotalDeposits + TotalWithdrawals
+        // Available Budget = Opening + Income - CashExpenses - DebtPayments - TotalDeposits + TotalWithdrawals - TransfersOut + TransfersIn
         $balance = bcadd($this->opening_balance_bs, $this->income_bs, 2);
         $balance = bcsub($balance, $this->cash_bs, 2);
         $balance = bcsub($balance, $this->debt_payments_bs, 2);
         $balance = bcsub($balance, $this->total_deposits_bs, 2);
         $balance = bcadd($balance, $this->total_withdrawals_bs, 2);
+
+        $transfersOut = once(fn() => $this->transfers()->where('source_type', 'cash')->sum('amount_bs'));
+        $transfersIn = once(fn() => $this->transfers()->where('destination_type', 'cash')->sum('amount_bs'));
+
+        $balance = bcsub($balance, (string)$transfersOut, 2);
+        $balance = bcadd($balance, (string)$transfersIn, 2);
+
         return $balance;
     }
 
