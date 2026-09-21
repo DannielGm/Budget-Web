@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Budget;
 use App\Models\ExchangeRate;
 use App\Services\ExchangeRateService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
@@ -36,6 +37,7 @@ class ExchangeRateServiceTest extends TestCase
 
     public function test_fetches_and_stores_the_official_bcv_rate(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-09-19'));
         $this->fakeBcvResponses();
 
         $snapshot = app(ExchangeRateService::class)->ensureFresh();
@@ -48,29 +50,31 @@ class ExchangeRateServiceTest extends TestCase
 
     public function test_does_not_refetch_when_today_is_already_stored(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-09-19'));
         ExchangeRate::create([
-            'date_iso' => today()->toDateString(),
+            'date_iso' => '2026-09-19',
             'rate_bs_per_usd' => '999.99',
             'fetched_at' => time(),
         ]);
 
         app(ExchangeRateService::class)->ensureFresh();
 
-        $this->assertSame('999.99', (string) ExchangeRate::find(today()->toDateString())->rate_bs_per_usd);
+        $this->assertSame('999.99', (string) ExchangeRate::find('2026-09-19')->rate_bs_per_usd);
     }
 
     public function test_forces_a_refetch_when_requested(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-09-19'));
         $this->fakeBcvResponses();
         ExchangeRate::create([
-            'date_iso' => today()->toDateString(),
+            'date_iso' => '2026-09-19',
             'rate_bs_per_usd' => '999.99',
             'fetched_at' => time(),
         ]);
 
         app(ExchangeRateService::class)->ensureFresh(true);
 
-        $this->assertSame('250.50', (string) ExchangeRate::find(today()->toDateString())->rate_bs_per_usd);
+        $this->assertSame('250.50', (string) ExchangeRate::find('2026-09-19')->rate_bs_per_usd);
     }
 
     public function test_fails_soft_when_the_bcv_endpoint_is_unreachable(): void
