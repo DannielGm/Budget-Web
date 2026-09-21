@@ -87,6 +87,25 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         }
     };
 
+    const getRestante = () => {
+        const opening = parseFloat(data.opening_bs) || 0;
+        if (!debt) {
+            const currentPayment = parseFloat(data.payment_bs) || 0;
+            return opening - currentPayment;
+        }
+
+        if (isAdditive) {
+            const currentPayment = parseFloat(debt.payment_bs) || 0;
+            const additive = parseFloat(additiveAmount) || 0;
+            return opening - currentPayment - additive;
+        } else {
+            const currentPayment = parseFloat(data.payment_bs) || 0;
+            return opening - currentPayment;
+        }
+    };
+
+    const restanteValue = getRestante();
+
     const handleClose = () => {
         clearErrors();
         onClose();
@@ -219,11 +238,11 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
                     <div>
                         <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
-                            Restante: Bs {data.opening_bs && (isAdditive ? (parseFloat(data.opening_bs) - parseFloat(debt?.payment_bs || 0) - (parseFloat(additiveAmount)||0)) : (parseFloat(data.opening_bs) - parseFloat(data.payment_bs))) ? (parseFloat(data.opening_bs) - (isAdditive ? (parseFloat(debt?.payment_bs || 0) + (parseFloat(additiveAmount)||0)) : parseFloat(data.payment_bs))).toLocaleString('es-ES') : '0.00'}
+                            Restante: Bs {restanteValue > 0 ? restanteValue.toLocaleString('es-ES') : '0.00'}
                         </p>
                     </div>
 
-                    {debt?.payments && debt.payments.length > 0 && (
+                    {debt?.payments?.length > 0 && (
                         <div className="pt-2">
                             <button
                                 type="button"
