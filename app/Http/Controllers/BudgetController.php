@@ -36,7 +36,7 @@ class BudgetController extends Controller
             : $monthRate;
 
         return Inertia::render('Dashboard', [
-            'budget' => $budget->load(['categories', 'expenses', 'debts', 'debts.payments'])->append([
+            'budget' => $budget->load(['categories', 'expenses', 'debts', 'debts.payments', 'savingsTransactions', 'transfers'])->append([
                 'cash_bs',
                 'credit_purchases_bs',
                 'debt_payments_bs',

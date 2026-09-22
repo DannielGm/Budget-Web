@@ -135,6 +135,14 @@ export default function Dashboard() {
         };
     }, [currentViewIndex]);
 
+    const isPastMonth = budget.month_id !== currentMonthId;
+
+    useEffect(() => {
+        if (isPastMonth && !dateFilter) {
+            setRangeMode('Mes');
+        }
+    }, [isPastMonth, dateFilter]);
+
     const toggleTheme = () => {
         setIsDark(!isDark);
         document.documentElement.classList.toggle('dark');
@@ -420,11 +428,13 @@ export default function Dashboard() {
                                 <button
                                     key={mode}
                                     onClick={() => applyRangeMode(mode)}
+                                    disabled={isPastMonth && !dateFilter && mode !== 'Mes'}
                                     className={cn(
-                                        'px-3 py-1 text-xs font-bold rounded-md transition-colors',
+                                        'px-3 py-1 text-xs font-bold rounded-md transition-colors focus:outline-none focus:ring-0',
                                         rangeMode === mode
                                             ? 'bg-white dark:bg-gray-700 shadow-sm dark:text-white'
                                             : 'text-gray-500 dark:text-gray-400',
+                                        isPastMonth && !dateFilter && mode !== 'Mes' ? 'opacity-50 cursor-not-allowed' : ''
                                     )}
                                 >
                                     {mode}
@@ -450,6 +460,9 @@ export default function Dashboard() {
                     <BudgetGraph
                         budget={budget}
                         categories={visibleCategories}
+                        rangeMode={rangeMode}
+                        dateFilter={dateFilter}
+                        today={today}
                     />
                 </div>
 

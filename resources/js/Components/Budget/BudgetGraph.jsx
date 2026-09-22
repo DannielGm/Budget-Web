@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend } from 'recharts';
 
-export default function BudgetGraph({ budget, categories, rangeMode, dateFilter }) {
+export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today }) {
     const visibleNames = new Set((categories ?? budget.categories).map((c) => c.name));
 
     const data = useMemo(() => {
@@ -39,8 +39,9 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter 
                 if (tx.destination_type === 'cash') currentAvailable += parseFloat(tx.amount_bs || 0);
 
                 // Track savings impact of transfers
-                if (tx.destination_type === 'saving') cumulativeSavings += parseFloat(tx.amount_usd || 0);
-                if (tx.source_type === 'saving') cumulativeSavings -= parseFloat(tx.amount_usd || 0);
+                const usdVal = parseFloat(tx.amount_usd) || (parseFloat(tx.amount_bs) / parseFloat(budget.income_rate || 1)) || 0;
+                if (tx.destination_type === 'saving') cumulativeSavings += usdVal;
+                if (tx.source_type === 'saving') cumulativeSavings -= usdVal;
             } else if (tx.type === 'expense') {
                 const category = budget.categories.find(c => c.name === tx.category_name);
                 if (category?.cash_expense && !category?.is_presupuesto) {
@@ -65,10 +66,13 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter 
 
         // 3. Post-calculation Filtering: Slice the array based on user's time selection
         let sliced = points;
-        if (dateFilter && rangeMode !== 'Mes') {
-            const end = new Date(`${dateFilter}T23:59:59`).getTime();
+
+        // If there's a dateFilter, or we are in a mode other than 'Mes', we need to slice
+        if (rangeMode !== 'Mes') {
+            const anchorDate = dateFilter ? dateFilter : today;
+            const end = new Date(`${anchorDate}T23:59:59`).getTime();
             const startDays = rangeMode === '7d' ? 7 : 1;
-            const start = new Date(`${dateFilter}T00:00:00`);
+            const start = new Date(`${anchorDate}T00:00:00`);
             start.setDate(start.getDate() - (startDays - 1));
             const startTime = start.getTime();
 
@@ -85,8 +89,10 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter 
             // Adjust display times for 1d view
             if (rangeMode === '1d') {
                 sliced.forEach(p => {
-                    const d = new Date(p.timestampMs);
-                    p.displayTime = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    if (p.timestampMs > 0) {
+                        const d = new Date(p.timestampMs);
+                        p.displayTime = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    }
                 });
             }
 
@@ -105,7 +111,7 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter 
             savings: p.savings - baseSavings,
         }));
 
-    }, [budget, categories, rangeMode, dateFilter, visibleNames]);
+    }, [budget, categories, rangeMode, dateFilter, today, visibleNames]);
 
     const totalPresupuesto = useMemo(() => {
         return budget.categories
@@ -113,8 +119,8 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter 
             .reduce((sum, c) => sum + (budget.expenses || []).filter(e => e.category_name === c.name).reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0), 0);
     }, [budget]);
 
-    const currentAvailable = data[data.length - 1]?.available || 0;
-    const isBudgetOk = currentAvailable >= totalPresupuesto;
+    // isBudgetOk checks the actual global available balance vs the total presupuesto
+    const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuesto;
 
     return (
         <div className="bg-[#FFF1E7] dark:bg-[#242430] rounded-2xl p-4 h-[280px] shadow-inner transition-colors">
