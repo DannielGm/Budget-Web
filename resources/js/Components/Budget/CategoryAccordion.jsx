@@ -49,12 +49,15 @@ export default function CategoryAccordion({
                             <div
                                 key={cat.id}
                                 className={cn(
-                                    "group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer",
+                                    "group flex items-center justify-between p-3 rounded-2xl border transition-all cursor-pointer select-none",
                                     isSelected
                                         ? "bg-orange-50 dark:bg-purple-900/20 border-[#FF8A3D] dark:border-[#9B7BFF]"
                                         : "bg-white dark:bg-gray-800 border-gray-100 dark:border-gray-700 hover:border-gray-200 dark:hover:border-gray-600"
                                 )}
                                 onClick={() => setActiveCategory(cat.name)}
+                                onDoubleClick={() => {
+                                    onSelect(cat.name);
+                                }}
                             >
                                 <div className="flex items-center gap-3">
                                     <div className={cn(

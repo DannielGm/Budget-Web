@@ -14,10 +14,16 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'cash_expense' => 'required|boolean',
             'is_presupuesto' => 'required|boolean',
+            'debt_id' => 'nullable|integer|exists:debts,id',
         ]);
 
         $maxPosition = Category::where('month_id', $validated['month_id'])->max('position') ?: 0;
         $validated['position'] = $maxPosition + 1;
+
+        // Ensure debt_id is wiped if it's not a credit category anymore
+        if ($validated['cash_expense'] || $validated['is_presupuesto']) {
+            $validated['debt_id'] = null;
+        }
 
         Category::create($validated);
 
@@ -30,7 +36,15 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'cash_expense' => 'sometimes|boolean',
             'is_presupuesto' => 'sometimes|boolean',
+            'debt_id' => 'nullable|integer|exists:debts,id',
         ]);
+
+        // Ensure debt_id is wiped if it's not a credit category anymore
+        $isCash = $validated['cash_expense'] ?? $category->cash_expense;
+        $isPresupuesto = $validated['is_presupuesto'] ?? $category->is_presupuesto;
+        if ($isCash || $isPresupuesto) {
+            $validated['debt_id'] = null;
+        }
 
         // If name changes, we need to update all associated expenses
         if ($validated['name'] !== $category->name) {

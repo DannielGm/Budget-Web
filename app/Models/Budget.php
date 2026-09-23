@@ -141,6 +141,7 @@ class Budget extends Model
             })
             ->where('categories.cash_expense', 0)
             ->where('categories.is_presupuesto', 0)
+            ->whereNull('categories.debt_id')
             ->sum('amount_bs'));
     }
 
@@ -198,7 +199,10 @@ class Budget extends Model
 
     public function getDebtBsAttribute(): string
     {
-        $debtsRemaining = $this->debts->sum(fn($d) => bcsub($d->opening_bs, $d->payment_bs, 2));
+        $debtsRemaining = $this->debts->sum(function($d) {
+            $totalOwed = bcadd($d->opening_bs, $d->credit_expenses_bs, 2);
+            return bcsub($totalOwed, $d->payment_bs, 2);
+        });
         return bcadd($this->credit_purchases_bs, (string)$debtsRemaining, 2);
     }
 }

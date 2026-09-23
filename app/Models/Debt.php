@@ -25,4 +25,17 @@ class Debt extends Model
     {
         return $this->hasMany(DebtPayment::class)->orderBy('timestamp', 'asc');
     }
+
+    public function categories(): HasMany
+    {
+        return $this->hasMany(Category::class);
+    }
+
+    public function getCreditExpensesBsAttribute(): string
+    {
+        return once(fn() => (string) Expense::whereIn(
+            'category_name',
+            $this->categories()->pluck('name')
+        )->where('month_id', $this->month_id)->sum('amount_bs'));
+    }
 }

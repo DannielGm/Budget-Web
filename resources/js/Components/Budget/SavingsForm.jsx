@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
+import FormattedNumberInput from '@/Components/FormattedNumberInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -133,10 +134,8 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <InputLabel htmlFor="amount_usd" value="Monto ($)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="amount_usd"
-                                type="number"
-                                step="0.01"
                                 name="amount_usd"
                                 value={data.amount_usd}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -148,10 +147,8 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
 
                         <div>
                             <InputLabel htmlFor="exchange_rate" value="Tasa (Bs/$)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="exchange_rate"
-                                type="number"
-                                step="0.01"
                                 name="exchange_rate"
                                 value={data.exchange_rate}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"

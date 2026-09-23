@@ -81,7 +81,12 @@ export default function Dashboard() {
         budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger,
     } = usePage().props;
 
-    const [isDark, setIsDark] = useState(false);
+    const [isDark, setIsDark] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return document.documentElement.classList.contains('dark');
+        }
+        return false;
+    });
     const [selectedCategoryName, setSelectedCategoryName] = useState(budget.categories[0]?.name);
     const [showCalendar, setShowCalendar] = useState(false);
     const [rangeMode, setRangeMode] = useState('Mes');
@@ -144,8 +149,15 @@ export default function Dashboard() {
     }, [isPastMonth, dateFilter]);
 
     const toggleTheme = () => {
-        setIsDark(!isDark);
-        document.documentElement.classList.toggle('dark');
+        const nextDark = !isDark;
+        setIsDark(nextDark);
+        if (nextDark) {
+            document.documentElement.classList.add('dark');
+            localStorage.theme = 'dark';
+        } else {
+            document.documentElement.classList.remove('dark');
+            localStorage.theme = 'light';
+        }
     };
 
     // ---- Month / day navigation -------------------------------------------
@@ -463,6 +475,7 @@ export default function Dashboard() {
                         rangeMode={rangeMode}
                         dateFilter={dateFilter}
                         today={today}
+                        savingsLedger={savingsLedger || []}
                     />
                 </div>
 
@@ -486,10 +499,10 @@ export default function Dashboard() {
 
                     <div className="mb-4">
                         <p className="text-2xl font-black font-serif tracking-tight">
-                            Bs {totalDebtBs.toLocaleString('es-ES')}
+                            Bs {totalDebtBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
                         <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
-                            $ {budget.income_rate > 0 ? (totalDebtBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '0.00'}
+                            $ {budget.income_rate > 0 ? (totalDebtBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                         </p>
                     </div>
 
@@ -497,20 +510,31 @@ export default function Dashboard() {
                         {creditPurchasesBs > 0 && (
                             <div className="flex justify-between items-center">
                                 <span className="text-xs text-gray-300 font-medium">Compras a crédito</span>
-                                <span className="text-sm font-bold">Bs {creditPurchasesBs.toLocaleString('es-ES')}</span>
-                            </div>
-                        )}
-                        {budget.debts.map(debt => (
-                            <div key={debt.id} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" onClick={() => handleEditDebt(debt)}>
-                                <span className="text-xs text-gray-300 font-medium">{debt.label}</span>
                                 <div className="text-right">
-                                    <p className="text-sm font-bold">Bs {(parseFloat(debt.opening_bs) - parseFloat(debt.payment_bs)).toLocaleString('es-ES')}</p>
-                                    {parseFloat(debt.payment_bs) > 0 && (
-                                        <p className="text-[10px] text-green-400 font-bold">Pagado: Bs {parseFloat(debt.payment_bs).toLocaleString('es-ES')}</p>
-                                    )}
+                                    <span className="text-sm font-bold block">Bs {creditPurchasesBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                    <span className="text-[10px] text-gray-400 font-bold">$ {budget.income_rate > 0 ? (creditPurchasesBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
                                 </div>
                             </div>
-                        ))}
+                        )}
+                        {budget.debts.map(debt => {
+                            const debtRemainingBs = (parseFloat(debt.opening_bs) + parseFloat(debt.credit_expenses_bs || 0)) - parseFloat(debt.payment_bs);
+                            return (
+                                <div key={debt.id} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" onClick={() => handleEditDebt(debt)}>
+                                    <span className="text-xs text-gray-300 font-medium">{debt.label}</span>
+                                    <div className="text-right">
+                                        <p className="text-sm font-bold">Bs {debtRemainingBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold">$ {budget.income_rate > 0 ? (debtRemainingBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</p>
+
+                                        {parseFloat(debt.payment_bs) > 0 && (
+                                            <p className="text-[10px] text-green-400 font-bold">Pagado: Bs {parseFloat(debt.payment_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        )}
+                                        {parseFloat(debt.credit_expenses_bs || 0) > 0 && (
+                                            <p className="text-[10px] text-red-400 font-bold">Nuevos cargos: Bs {parseFloat(debt.credit_expenses_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -552,17 +576,14 @@ export default function Dashboard() {
                                 {dateFilter ? 'No hay gastos en esa fecha' : 'Sin gastos todavía'}
                             </p>
                         ) : (selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).map(expense => (
-                            <div key={expense.id} className="flex justify-between items-center group">
+                            <div key={expense.id} className="flex justify-between items-center group select-none" onDoubleClick={() => handleEditExpense(expense)}>
                                 <div className="space-y-1">
                                     <div className="flex items-center gap-2">
                                         <p className="font-bold text-sm dark:text-white group-hover:text-[#FF8A3D] transition-colors">
                                             {expense.label}
                                         </p>
                                         <div className="hidden group-hover:flex items-center gap-1">
-                                            <button onClick={() => handleEditExpense(expense)} className="p-1 text-gray-400 hover:text-blue-500">
-                                                <Edit2 size={12} />
-                                            </button>
-                                            <button onClick={() => handleDeleteExpense(expense)} className="p-1 text-gray-400 hover:text-red-500">
+                                            <button onClick={() => handleDeleteExpense(expense)} className="p-1 text-gray-400 hover:text-red-500" title="Eliminar gasto">
                                                 <Trash2 size={12} />
                                             </button>
                                         </div>
@@ -578,10 +599,10 @@ export default function Dashboard() {
                                             ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
                                             : "dark:text-white"
                                     )}>
-                                        Bs {parseFloat(expense.amount_bs).toLocaleString('es-ES')}
+                                        Bs {parseFloat(expense.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                     <p className="text-[10px] text-gray-400 font-bold">
-                                        $ {(parseFloat(expense.amount_bs) / parseFloat(budget.income_rate)).toLocaleString('es-ES', {minimumFractionDigits: 2})}
+                                        $ {(parseFloat(expense.amount_bs) / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                     </p>
                                 </div>
                             </div>
@@ -592,14 +613,19 @@ export default function Dashboard() {
 
                     <div className="flex justify-between items-center">
                         <span className="font-bold text-xs text-gray-400 uppercase tracking-widest">TOTAL</span>
-                        <span className={cn(
-                            "font-black text-lg transition-colors",
-                            selectedCategory?.is_presupuesto
-                                ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
-                                : "dark:text-white"
-                        )}>
-                            Bs {parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES')}
-                        </span>
+                        <div className="text-right">
+                            <span className={cn(
+                                "font-black text-lg transition-colors block",
+                                selectedCategory?.is_presupuesto
+                                    ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
+                                    : "dark:text-white"
+                            )}>
+                                Bs {parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                            <span className="text-[10px] text-gray-400 font-bold">
+                                $ {budget.income_rate > 0 ? (parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                            </span>
+                        </div>
                     </div>
                 </div>
 
@@ -714,6 +740,7 @@ export default function Dashboard() {
                         show={showDebtSummary}
                         onClose={() => setShowDebtSummary(false)}
                         debts={budget.debts}
+                        creditPurchasesBs={creditPurchasesBs}
                         currentRate={budget.income_rate}
                     />
                 )}

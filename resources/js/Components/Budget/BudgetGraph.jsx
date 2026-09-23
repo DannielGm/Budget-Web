@@ -1,18 +1,23 @@
 import React, { useMemo } from 'react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend } from 'recharts';
 
-export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today }) {
+export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today, savingsLedger }) {
     const visibleNames = new Set((categories ?? budget.categories).map((c) => c.name));
 
     const data = useMemo(() => {
         // 1. Collect EVERYTHING that touches the balance chronologically
-        const allTransactions = [
+        const cashEvents = [
             ...(budget.expenses || []).map(e => ({...e, type: 'expense'})),
-            ...(budget.savingsTransactions || []).map(s => ({...s, isSaving: true})),
-            ...(budget.transfers || []).map(t => ({...t, type: 'transfer'})),
-        ].sort((a, b) => a.timestamp - b.timestamp);
+            ...(budget.transfers || []).filter(t => t.source_type === 'cash' || t.destination_type === 'cash').map(t => ({...t, type: 'transfer'})),
+        ];
 
-        // 2. Track running totals starting exactly from month start
+        // 2. Map savings ledger into chronological events
+        const savingsEvents = [...(savingsLedger || [])].map(s => ({ ...s, isLedgerEvent: true }));
+
+        // 3. Combine and sort all events for chronological processing
+        const allTransactions = [...cashEvents, ...savingsEvents].sort((a, b) => a.timestamp - b.timestamp);
+
+        // 4. Track running totals starting exactly from month start
         let currentAvailable = parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs);
         let cumulativeExpenses = 0;
         let cumulativeSavings = 0; // Starts at 0 for THIS month's movement
@@ -27,29 +32,34 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
         }];
 
         allTransactions.forEach(tx => {
-            if (tx.isSaving) {
-                if (tx.type === 'deposit') {
-                    // Manual deposits don't deduct from cash_bs in the new system (transfers do that)
-                    cumulativeSavings += parseFloat(tx.amount_usd || 0);
-                } else if (tx.type === 'withdrawal') {
-                    cumulativeSavings -= parseFloat(tx.amount_usd || 0);
+            if (tx.isLedgerEvent) {
+                // Using the historial de movimientos in the savings dashboard as a source
+                // UP by deposit or transfer to saving, DOWN by withdrawal or transfer from saving
+                if (tx.kind === 'transaction') {
+                    if (tx.type === 'deposit') {
+                        cumulativeSavings += parseFloat(tx.amount_usd || 0);
+                    } else if (tx.type === 'withdrawal') {
+                        cumulativeSavings -= parseFloat(tx.amount_usd || 0);
+                    }
+                } else if (tx.kind === 'transfer') {
+                    const usdVal = parseFloat(tx.amount_usd) || (parseFloat(tx.amount_bs) / parseFloat(tx.rate || budget.income_rate || 1)) || 0;
+                    if (tx.destination_type === 'saving') cumulativeSavings += usdVal;
+                    if (tx.source_type === 'saving') cumulativeSavings -= usdVal;
                 }
-            } else if (tx.type === 'transfer') {
-                if (tx.source_type === 'cash') currentAvailable -= parseFloat(tx.amount_bs || 0);
-                if (tx.destination_type === 'cash') currentAvailable += parseFloat(tx.amount_bs || 0);
-
-                // Track savings impact of transfers
-                const usdVal = parseFloat(tx.amount_usd) || (parseFloat(tx.amount_bs) / parseFloat(budget.income_rate || 1)) || 0;
-                if (tx.destination_type === 'saving') cumulativeSavings += usdVal;
-                if (tx.source_type === 'saving') cumulativeSavings -= usdVal;
-            } else if (tx.type === 'expense') {
-                const category = budget.categories.find(c => c.name === tx.category_name);
-                if (category?.cash_expense && !category?.is_presupuesto) {
-                    currentAvailable -= parseFloat(tx.amount_bs || 0);
-                }
-                // Only graph expenses if they are in the selected category filter
-                if (visibleNames.has(tx.category_name) && !category?.is_presupuesto) {
-                    cumulativeExpenses += parseFloat(tx.amount_bs || 0);
+            } else {
+                // Cash Events
+                if (tx.type === 'transfer') {
+                    if (tx.source_type === 'cash') currentAvailable -= parseFloat(tx.amount_bs || 0);
+                    if (tx.destination_type === 'cash') currentAvailable += parseFloat(tx.amount_bs || 0);
+                } else if (tx.type === 'expense') {
+                    const category = budget.categories.find(c => c.name === tx.category_name);
+                    if (category?.cash_expense && !category?.is_presupuesto) {
+                        currentAvailable -= parseFloat(tx.amount_bs || 0);
+                    }
+                    // Only graph expenses if they are in the selected category filter
+                    if (visibleNames.has(tx.category_name) && !category?.is_presupuesto) {
+                        cumulativeExpenses += parseFloat(tx.amount_bs || 0);
+                    }
                 }
             }
 
@@ -64,7 +74,7 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
             });
         });
 
-        // 3. Post-calculation Filtering: Slice the array based on user's time selection
+        // 5. Post-calculation Filtering: Slice the array based on user's time selection
         let sliced = points;
 
         // If there's a dateFilter, or we are in a mode other than 'Mes', we need to slice
@@ -99,19 +109,18 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
             sliced = [startingPoint, ...sliced];
         }
 
-        // 4. Force Graph Base to 0: Subtract starting values from all points in the viewport
+        // 4. Force Graph Base to 0 for available and expenses, but keep savings absolute
         const baseAvailable = sliced[0].available;
         const baseExpenses = sliced[0].expenses;
-        const baseSavings = sliced[0].savings;
 
         return sliced.map(p => ({
             ...p,
             available: p.available - baseAvailable,
             expenses: p.expenses - baseExpenses,
-            savings: p.savings - baseSavings,
+            savings: p.savings, // Keep absolute for "Ahorro del mes"
         }));
 
-    }, [budget, categories, rangeMode, dateFilter, today, visibleNames]);
+    }, [budget, categories, rangeMode, dateFilter, today, visibleNames, savingsLedger]);
 
     const totalPresupuesto = useMemo(() => {
         return budget.categories

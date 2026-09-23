@@ -12,14 +12,16 @@ class DebtController extends Controller
         $validated = $request->validate([
             'month_id' => 'required|string|exists:budgets,month_id',
             'label' => 'required|string',
-            'opening_bs' => 'required|numeric|min:0',
-            'payment_bs' => 'required|numeric|min:0',
+            'opening_bs' => 'nullable|numeric|min:0',
+            'payment_bs' => 'nullable|numeric|min:0',
         ]);
 
         $maxPosition = Debt::where('month_id', $validated['month_id'])
             ->max('position') ?: 0;
 
         $validated['position'] = $maxPosition + 1;
+        $validated['opening_bs'] = $validated['opening_bs'] ?? 0;
+        $validated['payment_bs'] = $validated['payment_bs'] ?? 0;
 
         $debt = Debt::create($validated);
 

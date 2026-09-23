@@ -13,6 +13,9 @@ class BudgetService
     {
         $budget = Budget::with(['categories', 'expenses', 'debts', 'debts.payments', 'transfers'])->find($monthId);
         if ($budget) {
+            // We append the new credit_expenses_bs attribute directly to the debts so the UI can read it
+            $budget->debts->each->append('credit_expenses_bs');
+
             // Append dynamic attributes for JSON serialization
             $budget->append([
                 'cash_bs',
@@ -68,21 +71,13 @@ class BudgetService
                 $budget->update(['income_rate' => $monthRate->rate_bs_per_usd]);
             }
 
-            if ($template) {
-                foreach ($template->categories as $category) {
-                    Category::create([
-                        'month_id' => $monthId,
-                        'name' => $category->name,
-                        'cash_expense' => $category->cash_expense,
-                        'is_presupuesto' => $category->is_presupuesto,
-                        'position' => $category->position,
-                    ]);
-                }
-            }
-
             if ($predecessor) {
+                // We MUST create debts BEFORE categories because cloned categories need the newly cloned debt IDs.
                 foreach ($predecessor->debts as $debt) {
-                    $remaining = bcsub($debt->opening_bs, $debt->payment_bs, 2);
+                    $creditAdded = $debt->credit_expenses_bs; // The specific linked credit expenses added last month
+                    $totalOwed = bcadd($debt->opening_bs, $creditAdded, 2);
+                    $remaining = bcsub($totalOwed, $debt->payment_bs, 2);
+
                     if (bccomp($remaining, '0', 2) > 0) {
                         Debt::create([
                             'month_id' => $monthId,
@@ -102,6 +97,33 @@ class BudgetService
                         'opening_bs' => $creditPurchases,
                         'payment_bs' => '0',
                         'position' => 999, // Append to end
+                    ]);
+                }
+            }
+
+            if ($template) {
+                foreach ($template->categories as $category) {
+                    // Find the equivalent debt bucket in the NEW month if it was linked
+                    $newDebtId = null;
+                    if ($category->debt_id) {
+                        $oldDebt = Debt::find($category->debt_id);
+                        if ($oldDebt) {
+                            $newDebt = Debt::where('month_id', $monthId)
+                                ->where('label', $oldDebt->label)
+                                ->first();
+                            if ($newDebt) {
+                                $newDebtId = $newDebt->id;
+                            }
+                        }
+                    }
+
+                    Category::create([
+                        'month_id' => $monthId,
+                        'name' => $category->name,
+                        'cash_expense' => $category->cash_expense,
+                        'is_presupuesto' => $category->is_presupuesto,
+                        'position' => $category->position,
+                        'debt_id' => $newDebtId,
                     ]);
                 }
             }

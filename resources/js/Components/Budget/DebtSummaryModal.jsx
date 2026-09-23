@@ -8,13 +8,20 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-export default function DebtSummaryModal({ show, onClose, debts = [], currentRate }) {
-    const allPayments = (debts || []).reduce((acc, debt) => {
+export default function DebtSummaryModal({ show, onClose, debts = [], currentRate, creditPurchasesBs = 0 }) {
+    const allEvents = (debts || []).reduce((acc, debt) => {
+        const events = [];
+        // Map actual payments
         const payments = debt.payments || [];
-        return acc.concat(payments.map(p => ({ ...p, debtLabel: debt.label })));
+        payments.forEach(p => events.push({ ...p, debtLabel: debt.label, isCreditExpense: false }));
+
+        // For simplicity in UI, we won't detail every single expense in this modal yet,
+        // but we ensure the total math above works! (Unless you'd like me to fetch individual expenses)
+
+        return acc.concat(events);
     }, []).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-    const totalRemaining = (debts || []).reduce((sum, d) => sum + (parseFloat(d.opening_bs || 0) - parseFloat(d.payment_bs || 0)), 0);
+    const totalRemaining = (debts || []).reduce((sum, d) => sum + ((parseFloat(d.opening_bs || 0) + parseFloat(d.credit_expenses_bs || 0)) - parseFloat(d.payment_bs || 0)), 0) + creditPurchasesBs;
 
     return (
         <Modal show={show} onClose={onClose} maxWidth="sm">
@@ -36,7 +43,7 @@ export default function DebtSummaryModal({ show, onClose, debts = [], currentRat
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 mb-6 border border-gray-100 dark:border-gray-800">
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-bold mb-1">Total Pendiente</p>
                     <p className="text-3xl font-black font-serif text-gray-900 dark:text-white tracking-tight">
-                        Bs {totalRemaining.toLocaleString('es-ES')}
+                        Bs {totalRemaining.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </p>
                     <p className="text-xs text-[#FF8A3D] dark:text-[#9B7BFF] font-bold uppercase tracking-wider mt-1">
                         $ {currentRate > 0 ? (totalRemaining / parseFloat(currentRate)).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '0.00'}
@@ -50,10 +57,10 @@ export default function DebtSummaryModal({ show, onClose, debts = [], currentRat
                 </div>
 
                 <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 no-scrollbar">
-                    {allPayments.length === 0 ? (
+                    {allEvents.length === 0 ? (
                         <p className="text-center text-sm text-gray-400 font-bold py-6">Sin pagos registrados</p>
                     ) : (
-                        allPayments.map(p => (
+                        allEvents.map(p => (
                             <div key={p.id} className="flex justify-between items-center bg-white dark:bg-gray-800 p-3 rounded-xl border border-gray-100 dark:border-gray-700 shadow-sm">
                                 <div className="flex items-center gap-3">
                                     <div className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-2 rounded-lg">
@@ -70,9 +77,15 @@ export default function DebtSummaryModal({ show, onClose, debts = [], currentRat
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                    <p className="font-black text-sm text-green-600 dark:text-green-400">
-                                        Bs {parseFloat(p.amount_bs).toLocaleString('es-ES')}
-                                    </p>
+                                    {p.amount_bs > 0 ? (
+                                        <p className="font-black text-sm text-green-600 dark:text-green-400">
+                                            + Bs {parseFloat(p.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                    ) : (
+                                        <p className="font-black text-sm text-red-500">
+                                            Bs {parseFloat(p.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </p>
+                                    )}
                                 </div>
                             </div>
                         ))

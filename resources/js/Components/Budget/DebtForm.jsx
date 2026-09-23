@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
+import FormattedNumberInput from '@/Components/FormattedNumberInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -33,7 +34,7 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         month_id: monthId,
         label: debt?.label || '',
         opening_bs: debt?.opening_bs || '',
-        payment_bs: debt?.payment_bs || '0',
+        payment_bs: debt?.payment_bs || '',
         additive_amount: '',
         additive_method: 'Transferencia',
         additive_timestamp: Date.now(),
@@ -129,12 +130,12 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         <Modal show={show} onClose={handleClose} maxWidth="md">
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {debt ? 'Editar Deuda ' : 'Nueva Deuda'}
+                    {debt ? 'Administrar Deuda' : 'Nueva Cuenta de Deuda'}
                 </h2>
 
                 <div className="space-y-4">
                     <div>
-                        <InputLabel htmlFor="label" value="Concepto" className="dark:text-gray-300" />
+                        <InputLabel htmlFor="label" value="Nombre de la Deuda" className="dark:text-gray-300" />
                         <TextInput
                             id="label"
                             type="text"
@@ -143,25 +144,28 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                             className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                             onChange={(e) => setData('label', e.target.value)}
                             required
-                            disabled={!!debt} // Labels are usually static for carried debts
+                            autoFocus
+                            disabled={!!debt && debt.label.includes('Compras a crédito')}
                         />
                         <InputError message={errors.label} className="mt-2" />
                     </div>
 
                     <div>
-                        <InputLabel htmlFor="opening_bs" value="Monto Inicial (Bs)" className="dark:text-gray-300" />
-                        <TextInput
+                        <InputLabel htmlFor="opening_bs" value="Monto Inicial (Bs) [Opcional]" className="dark:text-gray-300" />
+                        <FormattedNumberInput
                             id="opening_bs"
-                            type="number"
-                            step="0.01"
                             name="opening_bs"
                             value={data.opening_bs}
                             className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                             onChange={(e) => setData('opening_bs', e.target.value)}
-                            required
                             disabled={!!debt && !debt.label.includes('Compras a crédito')}
                         />
                         <InputError message={errors.opening_bs} className="mt-2" />
+                        {!debt && (
+                            <p className="mt-1 text-[10px] text-gray-400 font-medium">
+                                Si esta deuda solo se nutrirá de compras a crédito de este mes, puedes dejar este campo vacío.
+                            </p>
+                        )}
                     </div>
 
                     {debt ? (
@@ -187,10 +191,8 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
 
                             {isAdditive ? (
                                 <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                    <TextInput
+                                    <FormattedNumberInput
                                         id="additive_amount"
-                                        type="number"
-                                        step="0.01"
                                         placeholder="Monto a pagar"
                                         value={data.additive_amount}
                                         className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -214,10 +216,8 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                                 </div>
                             ) : (
                                 <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                    <TextInput
+                                    <FormattedNumberInput
                                         id="payment_bs"
-                                        type="number"
-                                        step="0.01"
                                         name="payment_bs"
                                         value={data.payment_bs}
                                         className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -228,17 +228,14 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                             )}
                         </div>
                     ) : (
-                        <div>
+                        <div className="hidden">
                             <InputLabel htmlFor="payment_bs" value="Pago Realizado (Bs)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="payment_bs"
-                                type="number"
-                                step="0.01"
                                 name="payment_bs"
                                 value={data.payment_bs}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                                 onChange={(e) => setData('payment_bs', e.target.value)}
-                                required
                             />
                             <InputError message={errors.payment_bs} className="mt-2" />
                         </div>

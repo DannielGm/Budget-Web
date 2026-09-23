@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
+import FormattedNumberInput from '@/Components/FormattedNumberInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -11,7 +12,7 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
 
 export default function BudgetForm({ show, onClose, budget }) {
-    const { data, setData, patch, processing, errors, reset, clearErrors } = useForm({
+    const { data, setData, patch, processing, errors, reset, clearErrors, transform } = useForm({
         income_bs: budget.income_bs || '0',
         income_rate: budget.income_rate || '0',
         opening_balance_bs: budget.opening_balance_bs || '0',
@@ -20,6 +21,17 @@ export default function BudgetForm({ show, onClose, budget }) {
     const [isAdditive, setIsAdditive] = useState(false);
     const [additiveAmount, setAdditiveAmount] = useState('');
     const [showCalendar, setShowCalendar] = useState(false);
+
+    transform((formData) => {
+        let finalIncome = formData.income_bs;
+        if (isAdditive && additiveAmount !== '') {
+            finalIncome = (parseFloat(budget.income_bs) + parseFloat(additiveAmount)).toString();
+        }
+        return {
+            ...formData,
+            income_bs: finalIncome,
+        };
+    });
 
     useEffect(() => {
         if (show) {
@@ -38,23 +50,23 @@ export default function BudgetForm({ show, onClose, budget }) {
         try {
             const response = await axios.get(route('exchange-rate.history'), { params: { date: dayIso } });
             if (response.data?.rate && parseFloat(response.data.rate) > 0) {
+                // Update the form data with the fetched rate
                 setData('income_rate', response.data.rate);
+                // Also close the calendar once the rate is selected
+                setShowCalendar(false);
+            } else {
+                alert('No se encontró una tasa registrada para esta fecha.');
             }
         } catch (error) {
             console.error("Failed to fetch rate", error);
+            alert('Error al buscar la tasa histórica.');
         }
     };
 
     const submit = (e) => {
         e.preventDefault();
 
-        let finalIncome = data.income_bs;
-        if (isAdditive && additiveAmount !== '') {
-            finalIncome = (parseFloat(budget.income_bs) + parseFloat(additiveAmount)).toString();
-        }
-
         patch(route('budgets.update', budget.month_id), {
-            data: { ...data, income_bs: finalIncome },
             onSuccess: () => onClose(),
         });
     };
@@ -85,10 +97,9 @@ export default function BudgetForm({ show, onClose, budget }) {
                         </div>
 
                         {isAdditive ? (
-                            <TextInput
+                            <FormattedNumberInput
                                 id="additiveAmount"
-                                type="number"
-                                step="0.01"
+                                name="additiveAmount"
                                 placeholder="Monto a sumar"
                                 value={additiveAmount}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -96,10 +107,8 @@ export default function BudgetForm({ show, onClose, budget }) {
                                 required
                             />
                         ) : (
-                            <TextInput
+                            <FormattedNumberInput
                                 id="income_bs"
-                                type="number"
-                                step="0.01"
                                 name="income_bs"
                                 value={data.income_bs}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -113,10 +122,8 @@ export default function BudgetForm({ show, onClose, budget }) {
                     <div>
                         <InputLabel htmlFor="income_rate" value="Tasa de Cambio (BCV)" className="dark:text-gray-300" />
                         <div className="flex gap-2">
-                            <TextInput
+                            <FormattedNumberInput
                                 id="income_rate"
-                                type="number"
-                                step="0.01"
                                 name="income_rate"
                                 value={data.income_rate}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -136,10 +143,8 @@ export default function BudgetForm({ show, onClose, budget }) {
 
                     <div>
                         <InputLabel htmlFor="opening_balance_bs" value="Saldo Inicial (Bs)" className="dark:text-gray-300" />
-                        <TextInput
+                        <FormattedNumberInput
                             id="opening_balance_bs"
-                            type="number"
-                            step="0.01"
                             name="opening_balance_bs"
                             value={data.opening_balance_bs}
                             className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"

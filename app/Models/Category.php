@@ -14,6 +14,7 @@ class Category extends Model
         'cash_expense',
         'is_presupuesto',
         'position',
+        'debt_id',
     ];
 
     protected $casts = [
@@ -24,6 +25,11 @@ class Category extends Model
     public function budget(): BelongsTo
     {
         return $this->belongsTo(Budget::class, 'month_id', 'month_id');
+    }
+
+    public function debt(): BelongsTo
+    {
+        return $this->belongsTo(Debt::class);
     }
 
     public function expenses(): HasMany

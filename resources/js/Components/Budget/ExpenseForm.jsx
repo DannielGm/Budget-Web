@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
+import FormattedNumberInput from '@/Components/FormattedNumberInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -125,10 +126,8 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <InputLabel htmlFor="amount_bs" value="Monto (Bs)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="amount_bs"
-                                type="number"
-                                step="0.01"
                                 name="amount_bs"
                                 value={data.amount_bs}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
@@ -140,10 +139,8 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
 
                         <div>
                             <InputLabel htmlFor="rate" value="Tasa (BCV)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="rate"
-                                type="number"
-                                step="0.01"
                                 name="rate"
                                 value={data.rate}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"

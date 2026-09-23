@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
+import FormattedNumberInput from '@/Components/FormattedNumberInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
@@ -309,10 +310,9 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         {!isPoolToPool && (
                             <div>
                                 <InputLabel htmlFor="amount_bs" value="Monto (Bs)" className="dark:text-gray-300" />
-                                <TextInput
+                                <FormattedNumberInput
                                     id="amount_bs"
-                                    type="number"
-                                    step="0.01"
+                                    name="amount_bs"
                                     value={data.amount_bs}
                                     className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                                     onChange={(e) => setData('amount_bs', e.target.value)}
@@ -323,10 +323,9 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         )}
                         <div>
                             <InputLabel htmlFor="amount_usd" value="Monto ($)" className="dark:text-gray-300" />
-                            <TextInput
+                            <FormattedNumberInput
                                 id="amount_usd"
-                                type="number"
-                                step="0.01"
+                                name="amount_usd"
                                 value={data.amount_usd}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                                 onChange={(e) => setData('amount_usd', e.target.value)}

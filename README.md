@@ -88,9 +88,30 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - **Pool Summary Modal**: Added dedicated tracking modals for each specific pool to view targeted deposit/withdrawal histories.
 - **Transfer Shortcuts**: Integrated a quick-transfer floating button directly into the Savings Dashboard.
 
+### alpha 0.2.9 — Graph Filtering & Savings Visibility Fixes
+- **Backend Eager Loading**: Explicitly loaded `savingsTransactions` and `transfers` relationships in the `BudgetController` to provide the frontend graph with complete historical data, fixing the flatlined savings issue.
+- **Unified Graph Savings Ledger**: Rewrote the `BudgetGraph` calculation engine to use the exact same underlying merged ledger (`savingsLedger`) as the Savings Dashboard, guaranteeing pixel-perfect alignment between the "Ahorro del Mes" line and the "Historial de Movimientos".
+- **Graph Invert Logic**: Fixed an issue where the savings graph rendered inversely. The graph now correctly goes UP on deposits and transfers into a savings pool, and DOWN on withdrawals and transfers out.
+- **Absolute Savings Tracking**: Prevented the `Ahorro del Mes` graph line from artificially dropping to $0 in windowed views (like 7d or 1d filters), ensuring it accurately shows the total accumulated monthly savings regardless of the active time slice.
+- **Date Range Protections**: Locked the `7d` and `1d` filters on past months, forcing the user into the `Mes` view to prevent confusing filtering anomalies on historical data.
+- **Presupuesto Affordability UI**: Updated the `isBudgetOk` boolean logic driving the chart threshold line so that it strictly references the *global* available balance, turning red only when planned budget exceeds actual funds.
+- **Expense Quick-Edit**: Added double-click/double-tap support on individual expenses in the dashboard list to open the edit modal instantly, removing the redundant edit icon to declutter the UI.
+- **Category Quick-Select**: Added double-click/double-tap support on categories in the Category Accordion to instantly view their expenses and close the menu.
+- **Thousand Separator Formatting**: Swapped all basic number inputs across all Modals (`ExpenseForm`, `DebtForm`, `BudgetForm`, `SavingsForm`, `TransferModal`) for a custom `FormattedNumberInput` powered by `react-number-format`. Users can now see real-time thousand dot `.` and decimal comma `,` parsing as they type, dramatically improving readability for large amounts while persisting safely to Laravel's numeric backend format.
+- **Strict Decimal Consistency**: Enforced a strict 2-digit decimal format (`minimumFractionDigits` & `maximumFractionDigits`) across all dashboard elements (Expenses, Debt totals, Modal summaries) to guarantee visual uniformity when trailing zeros are present.
+- **Credit Purchases in Debt Summary**: Fixed a bug in the Debt Summary Modal where "Compras a crédito" (credit purchases made during the active month) were omitted from the "Total Pendiente" calculation. The modal now perfectly matches the dashboard's total debt figure.
+- **Historical Rate Picker Fix**: Fixed a silent failure in the configuration menu's "Buscar tasa histórica" calendar. A dedicated API endpoint (`/exchange-rate/history`) was wired up in Laravel, allowing the frontend to query the pre-existing SQLite rate database safely without mutating it. Upon selecting a date, the frontend now updates the active input and auto-closes the calendar.
+- **USD Equivalence Display**: Added USD equivalent text indicators (converted using the month's active BCV rate) below individual debts, the "Compras a crédito" row, and the category "Total" sum in the main dashboard view.
+- **Theme Persistence & Native Detection**: Dark/Light mode selection is now saved in `localStorage` across app reloads. The `<head>` now features a zero-FOUC (Flash of Unstyled Content) inline script that automatically queries the device's system-level theme via `prefers-color-scheme`. When packaged with NativePHP, the Android WebView passes the OS-level Dark/Light mode preference down to the app, establishing the correct default theme on first launch.
+
 ## Planned Alphas
 
-### alpha 0.2.9 — 
+### alpha 0.2.9.5 — Credit Sub-Categories & bugfixes
+- **Debt Category Linking**: Added a `debt_id` foreign key to `categories`. Users can now link any "Crédito" category directly to a specific named Debt bucket (e.g. linking the "Supermarket" category directly to the "Zinli Card" debt).
+- **Dynamic Debt Tracking**: Reworked the entire Debt mathematical engine in `Budget.php` and `BudgetService.php`. Unlinked credit categories continue to accumulate into a global "Compras a crédito" fallback bucket, while linked credit categories now intelligently add directly to their assigned debt's balance in real-time.
+- **Debt UX Enhancements**: Enabled creating and editing named Debt buckets via a fully functional modal directly from the Debt badge '+' icon. Made the "Monto Inicial" optional during creation, allowing users to create empty debt buckets specifically to act as destinations for credit categories. Added visual badges on the debt card showing exactly how much new debt was accumulated ("Nuevos cargos") under a specific bucket during the active month.
+
+### alpha 0.3.0 — 
 
 ## Build and Current-Phase Checks
 

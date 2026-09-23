@@ -82,6 +82,19 @@ class BudgetController extends Controller
         return back()->with('rate_snapshot', $snapshot);
     }
 
+    public function historicalRate(Request $request)
+    {
+        $validated = $request->validate([
+            'date' => 'required|date_format:Y-m-d',
+        ]);
+
+        $rate = $this->rateService->dayRate($validated['date']);
+
+        return response()->json([
+            'rate' => $rate?->rate_bs_per_usd ?? '0'
+        ]);
+    }
+
     public function settings(): Response
     {
         $budgets = Budget::orderBy('month_id', 'desc')->get();

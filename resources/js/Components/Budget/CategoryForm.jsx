@@ -5,15 +5,21 @@ import TextInput from '@/Components/TextInput';
 import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
-import { useForm, router } from '@inertiajs/react';
+import { useForm, router, usePage } from '@inertiajs/react';
+import { CreditCard } from 'lucide-react';
 
 export default function CategoryForm({ show, onClose, category, monthId }) {
-    const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
+    const { budget } = usePage().props;
+    const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         name: category?.name || '',
         month_id: monthId,
         cash_expense: category?.cash_expense ?? true,
         is_presupuesto: category?.is_presupuesto ?? false,
+        debt_id: category?.debt_id || '',
+        type: '', // we will map this to the backend 'type' field
     });
+
+    const [isLinked, setIsLinked] = useState(!!category?.debt_id);
 
     // We compute 'type' based on the booleans
     const currentType = data.is_presupuesto ? 'presupuesto' : (data.cash_expense ? 'contado' : 'credito');
@@ -35,7 +41,10 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                 month_id: monthId,
                 cash_expense: category.cash_expense,
                 is_presupuesto: category.is_presupuesto,
+                debt_id: category.debt_id || '',
+                type: category.is_presupuesto ? 'presupuesto' : (category.cash_expense ? 'contado' : 'credito')
             });
+            setIsLinked(!!category.debt_id);
         } else if (show && !category) {
             reset();
             setData({
@@ -43,9 +52,18 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                 month_id: monthId,
                 cash_expense: true,
                 is_presupuesto: false,
+                debt_id: '',
+                type: 'contado'
             });
+            setIsLinked(false);
         }
     }, [show, category, monthId]);
+
+    transform((formData) => ({
+        ...formData,
+        type: formData.is_presupuesto ? 'presupuesto' : (formData.cash_expense ? 'contado' : 'credito'),
+        debt_id: (!formData.cash_expense && !formData.is_presupuesto && isLinked) ? formData.debt_id : null
+    }));
 
     const submit = (e) => {
         e.preventDefault();
@@ -111,6 +129,40 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                             )}
                         </select>
                     </div>
+
+                    {currentType === 'credito' && (
+                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 mt-4">
+                            <div className="flex items-center gap-2 mb-3">
+                                <input
+                                    type="checkbox"
+                                    id="isLinked"
+                                    checked={isLinked}
+                                    onChange={(e) => setIsLinked(e.target.checked)}
+                                    className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
+                                />
+                                <InputLabel htmlFor="isLinked" value="Vincular a cuenta de deuda" className="dark:text-gray-300 cursor-pointer flex items-center gap-1 font-bold">
+                                    <CreditCard size={14} className="text-[#FF8A3D] dark:text-[#9B7BFF]" /> Vincular a cuenta de deuda
+                                </InputLabel>
+                            </div>
+
+                            {isLinked && (
+                                <div>
+                                    <select
+                                        value={data.debt_id}
+                                        onChange={(e) => setData('debt_id', e.target.value)}
+                                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
+                                        required
+                                    >
+                                        <option value="" disabled>Seleccione una deuda...</option>
+                                        {budget.debts.filter(d => d.label !== 'Compras a crédito').map(d => (
+                                            <option key={d.id} value={d.id}>{d.label}</option>
+                                        ))}
+                                    </select>
+                                    <InputError message={errors.debt_id} className="mt-2" />
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="mt-8 flex justify-between gap-3">
