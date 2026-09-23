@@ -220,34 +220,34 @@ export default function BudgetCalendar({
                     })}
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
-                    <SecondaryButton onClick={onClose} className="dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+                <div className="mt-8 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+                    <SecondaryButton onClick={onClose} className="w-full sm:w-auto justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
                         Cancelar
                     </SecondaryButton>
                     {mode === 'pickDay' ? (
                         <PrimaryButton
                             onClick={() => emit(true)}
                             disabled={!selectedDay}
-                            className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
+                            className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
                         >
                             Elegir fecha
                         </PrimaryButton>
                     ) : (
-                        <>
+                        <div className="flex flex-col-reverse sm:flex-row gap-3 w-full sm:w-auto">
                             <PrimaryButton
                                 onClick={() => emit(true)}
                                 disabled={!selectedDay}
-                                className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
+                                className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
                             >
                                 Ver día
                             </PrimaryButton>
                             <PrimaryButton
                                 onClick={() => emit(false)}
-                                className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
+                                className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity"
                             >
                                 Ver mes
                             </PrimaryButton>
-                        </>
+                        </div>
                     )}
                 </div>
             </div>

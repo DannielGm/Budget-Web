@@ -166,11 +166,11 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                     </div>
                 </div>
 
-                <div className="mt-6 flex justify-end gap-3">
-                    <SecondaryButton onClick={handleClose} className="dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+                <div className="mt-8 flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
+                    <SecondaryButton onClick={handleClose} className="w-full sm:w-auto justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
                         Cancelar
                     </SecondaryButton>
-                    <PrimaryButton className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
+                    <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
                         {transaction ? 'Actualizar' : 'Guardar'}
                     </PrimaryButton>
                 </div>

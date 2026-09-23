@@ -279,22 +279,22 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
                     )}
                 </div>
 
-                <div className="mt-8 flex justify-between gap-3">
+                <div className="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between gap-4">
                     {debt ? (
                         <button
                             type="button"
                             onClick={handleDeleteDebt}
-                            className="text-red-500 hover:text-red-700 text-sm font-bold transition-colors"
+                            className="text-red-500 hover:text-red-700 text-sm font-bold transition-colors py-2 sm:py-0 w-full sm:w-auto text-center"
                         >
                             Eliminar Deuda
                         </button>
-                    ) : <div></div>}
+                    ) : <div className="hidden sm:block"></div>}
 
-                    <div className="flex gap-3">
-                        <SecondaryButton onClick={handleClose} className="dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
+                    <div className="flex flex-col-reverse sm:flex-row gap-3">
+                        <SecondaryButton onClick={handleClose} className="w-full sm:w-auto justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
                             Cancelar
                         </SecondaryButton>
-                        <PrimaryButton className="bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
+                        <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
                             {debt ? 'Actualizar Pago' : 'Crear Deuda'}
                         </PrimaryButton>
                     </div>

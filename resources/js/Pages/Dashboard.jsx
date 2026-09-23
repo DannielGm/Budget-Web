@@ -322,7 +322,7 @@ export default function Dashboard() {
                         <Dropdown>
                             <Dropdown.Trigger>
                                 <button className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
-                                    <MoreVertical size={24} />
+                                    <SettingsIcon size={24} />
                                 </button>
                             </Dropdown.Trigger>
                             <Dropdown.Content
