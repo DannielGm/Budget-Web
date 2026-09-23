@@ -35,21 +35,24 @@ class BudgetController extends Controller
             ? $this->rateService->dayRate($dayIso, $monthRate)
             : $monthRate;
 
-        return Inertia::render('Dashboard', [
-            'budget' => $budget->load(['categories', 'expenses', 'debts', 'debts.payments', 'savingsTransactions', 'transfers'])->append([
-                'cash_bs',
-                'credit_purchases_bs',
-                'debt_payments_bs',
-                'total_deposits_bs',
-                'total_withdrawals_bs',
-                'available_balance_bs',
-                'true_budget_bs',
-                'balance_bs',
-                'debt_bs',
-                'savings_pools',
-                'total_savings_usd',
-            ]),
+        $budget->load(['categories', 'expenses', 'debts', 'debts.payments', 'savingsTransactions', 'transfers']);
+        $budget->debts->each->append('credit_expenses_bs');
+        $budget->append([
+            'cash_bs',
+            'credit_purchases_bs',
+            'debt_payments_bs',
+            'total_deposits_bs',
+            'total_withdrawals_bs',
+            'available_balance_bs',
+            'true_budget_bs',
+            'balance_bs',
+            'debt_bs',
+            'savings_pools',
+            'total_savings_usd',
+        ]);
 
+        return Inertia::render('Dashboard', [
+            'budget' => $budget,
             'savingsLedger' => fn () => $this->budgetService->savingsLedger($budget),
             'monthIds' => Budget::orderBy('month_id', 'desc')->pluck('month_id'),
             'version' => config('budget.version'),
@@ -68,9 +71,15 @@ class BudgetController extends Controller
             'income_bs' => 'required|numeric|min:0',
             'income_rate' => 'required|numeric|min:0',
             'opening_balance_bs' => 'required|numeric',
+            'is_custom_rate' => 'sometimes|boolean',
         ]);
 
         $budget->update($validated);
+
+        // If they toggled back to auto-updating (false), we instantly fix the rate if needed
+        if (isset($validated['is_custom_rate']) && !$validated['is_custom_rate']) {
+            $this->rateService->refreshMonthRates();
+        }
 
         return back();
     }

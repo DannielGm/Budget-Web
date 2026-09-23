@@ -16,6 +16,7 @@ export default function BudgetForm({ show, onClose, budget }) {
         income_bs: budget.income_bs || '0',
         income_rate: budget.income_rate || '0',
         opening_balance_bs: budget.opening_balance_bs || '0',
+        is_custom_rate: budget.is_custom_rate ?? false,
     });
 
     const [isAdditive, setIsAdditive] = useState(false);
@@ -51,7 +52,7 @@ export default function BudgetForm({ show, onClose, budget }) {
             const response = await axios.get(route('exchange-rate.history'), { params: { date: dayIso } });
             if (response.data?.rate && parseFloat(response.data.rate) > 0) {
                 // Update the form data with the fetched rate
-                setData('income_rate', response.data.rate);
+                setData(d => ({...d, income_rate: response.data.rate, is_custom_rate: true}));
                 // Also close the calendar once the rate is selected
                 setShowCalendar(false);
             } else {
@@ -79,9 +80,23 @@ export default function BudgetForm({ show, onClose, budget }) {
     return (
         <Modal show={show} onClose={handleClose} maxWidth="md">
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    Configuración de {budget.month_label}
-                </h2>
+                  <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
+                          Configuración de {budget.month_label}
+                      </h2>
+                      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
+                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer select-none" htmlFor="autoRate">
+                              Tasa Diaria BCV
+                          </label>
+                          <input
+                              type="checkbox"
+                              id="autoRate"
+                              checked={!data.is_custom_rate}
+                              onChange={(e) => setData('is_custom_rate', !e.target.checked)}
+                              className="rounded dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-[#FF8A3D] focus:ring-[#FF8A3D] w-3.5 h-3.5"
+                          />
+                      </div>
+                  </div>
 
                 <div className="space-y-4">
                     <div>
@@ -127,7 +142,9 @@ export default function BudgetForm({ show, onClose, budget }) {
                                 name="income_rate"
                                 value={data.income_rate}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                onChange={(e) => setData('income_rate', e.target.value)}
+                                onChange={(e) => {
+                                    setData(d => ({...d, income_rate: e.target.value, is_custom_rate: true}));
+                                }}
                                 required
                             />
                             <button

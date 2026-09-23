@@ -123,9 +123,17 @@ class ExchangeRateService
      */
     public function refreshMonthRates(): void
     {
-        // We no longer aggressively overwrite the budget's income_rate.
-        // Users can manually set it via the BudgetForm, and we want to respect that.
-        // If an auto-update is strictly needed, a migration for 'is_custom_rate' should be added.
+        foreach (Budget::where('is_custom_rate', false)->orderBy('month_id')->get() as $budget) {
+            $rate = $this->monthRateFor($budget->month_id);
+
+            if ($rate === null || bccomp($rate->rate_bs_per_usd, '0', 2) === 0) {
+                continue;
+            }
+
+            if (bccomp($budget->income_rate, $rate->rate_bs_per_usd, 2) !== 0) {
+                $budget->update(['income_rate' => $rate->rate_bs_per_usd]);
+            }
+        }
     }
 
     /**

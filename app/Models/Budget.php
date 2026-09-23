@@ -18,6 +18,11 @@ class Budget extends Model
         'income_bs',
         'income_rate',
         'opening_balance_bs',
+        'is_custom_rate',
+    ];
+
+    protected $casts = [
+        'is_custom_rate' => 'boolean',
     ];
 
     public function categories(): HasMany
