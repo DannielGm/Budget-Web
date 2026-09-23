@@ -32,9 +32,9 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
     return (
         <div className="bg-[#FF8A3D] dark:bg-[#9B7BFF] rounded-2xl p-4 text-white shadow-lg transition-colors">
             <div className="flex justify-between items-start mb-2">
-                <span className="text-white/80 text-sm font-medium">Saldo disponible</span>
+                <span className="text-white/80 text-sm font-medium">Saldo Disponible</span>
                 <div className="flex items-center gap-2">
-                    <span className="text-white/80 text-xs font-medium">{parseFloat(contextRate).toLocaleString('es-ES')} Bs/USD</span>
+                    <span className="text-white/80 text-xs font-medium">{parseFloat(budget.income_rate || 0).toLocaleString('es-ES')} Bs/USD</span>
                     <button
                         onClick={refreshRate}
                         disabled={processing}
@@ -63,7 +63,7 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
                     <p className="text-sm font-bold">Bs {parseFloat(budget.income_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
                 <div className="text-right">
-                    <span className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Gastos de caja</span>
+                    <span className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Gastos</span>
                     <p className="text-sm font-bold">Bs {calculateCashExpenses(budget).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                 </div>
             </div>

@@ -62,6 +62,7 @@ class BudgetService
                 'income_bs' => '0',
                 'income_rate' => '0',
                 'opening_balance_bs' => $predecessor ? $this->calculateBalance($predecessor) : '0',
+                'is_custom_rate' => true, // Default to OFF for new budgets
             ]);
 
             // A brand-new month starts with the BCV rate that applies to it

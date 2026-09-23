@@ -123,15 +123,16 @@ class ExchangeRateService
      */
     public function refreshMonthRates(): void
     {
-        foreach (Budget::where('is_custom_rate', false)->orderBy('month_id')->get() as $budget) {
-            $rate = $this->monthRateFor($budget->month_id);
+        // Get the absolute latest available BCV rate globally, not constrained by the month.
+        $latestRate = ExchangeRate::orderBy('date_iso', 'desc')->first();
 
-            if ($rate === null || bccomp($rate->rate_bs_per_usd, '0', 2) === 0) {
-                continue;
-            }
+        if ($latestRate === null || bccomp($latestRate->rate_bs_per_usd, '0', 2) === 0) {
+            return;
+        }
 
-            if (bccomp($budget->income_rate, $rate->rate_bs_per_usd, 2) !== 0) {
-                $budget->update(['income_rate' => $rate->rate_bs_per_usd]);
+        foreach (Budget::where('is_custom_rate', false)->get() as $budget) {
+            if (bccomp($budget->income_rate, $latestRate->rate_bs_per_usd, 2) !== 0) {
+                $budget->update(['income_rate' => $latestRate->rate_bs_per_usd]);
             }
         }
     }

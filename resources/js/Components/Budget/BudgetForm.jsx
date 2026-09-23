@@ -7,11 +7,18 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}
 
 export default function BudgetForm({ show, onClose, budget }) {
+    const { rate } = usePage().props;
     const { data, setData, patch, processing, errors, reset, clearErrors, transform } = useForm({
         income_bs: budget.income_bs || '0',
         income_rate: budget.income_rate || '0',
@@ -84,17 +91,32 @@ export default function BudgetForm({ show, onClose, budget }) {
                       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
                           Configuración de {budget.month_label}
                       </h2>
-                      <div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-100 dark:border-gray-700">
-                          <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider cursor-pointer select-none" htmlFor="autoRate">
+                      <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-100 dark:border-gray-700">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider select-none">
                               Tasa Diaria BCV
-                          </label>
-                          <input
-                              type="checkbox"
-                              id="autoRate"
-                              checked={!data.is_custom_rate}
-                              onChange={(e) => setData('is_custom_rate', !e.target.checked)}
-                              className="rounded dark:bg-gray-900 border-gray-300 dark:border-gray-600 text-[#FF8A3D] focus:ring-[#FF8A3D] w-3.5 h-3.5"
-                          />
+                          </span>
+                          <button
+                              type="button"
+                              onClick={() => {
+                                  const isNowAuto = !!data.is_custom_rate; // toggling it back to auto
+                                  if (isNowAuto && rate?.rate) {
+                                      setData(d => ({ ...d, is_custom_rate: false, income_rate: rate.rate }));
+                                  } else {
+                                      setData('is_custom_rate', !data.is_custom_rate);
+                                  }
+                              }}
+                              className={cn(
+                                  "relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
+                                  !data.is_custom_rate ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
+                              )}
+                          >
+                              <span
+                                  className={cn(
+                                      "pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                                      !data.is_custom_rate ? "translate-x-4" : "translate-x-0"
+                                  )}
+                              />
+                          </button>
                       </div>
                   </div>
 
