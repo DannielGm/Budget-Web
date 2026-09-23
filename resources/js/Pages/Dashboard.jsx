@@ -220,11 +220,9 @@ export default function Dashboard() {
         setShowDebtModal(true);
     };
 
-    const creditPurchasesBs = (budget.categories || [])
-        .filter(c => !c.cash_expense && !c.is_presupuesto)
-        .reduce((sum, c) => sum + (budget.expenses || []).filter(e => e.category_name === c.name).reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0), 0);
+    const creditPurchasesBs = parseFloat(budget.credit_purchases_bs || 0);
 
-    const totalDebtBs = (budget.debts || []).reduce((sum, d) => sum + (parseFloat(d.opening_bs || 0) - parseFloat(d.payment_bs || 0)), 0) + creditPurchasesBs;
+    const totalDebtBs = parseFloat(budget.debt_bs || 0);
 
     const totalPresupuestoBs = (budget.categories || [])
         .filter(c => c.is_presupuesto)
