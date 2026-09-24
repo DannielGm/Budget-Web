@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage, router } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import BudgetForm from '@/Components/Budget/BudgetForm';
@@ -9,10 +10,11 @@ import CategoryForm from '@/Components/Budget/CategoryForm';
 import CategoryAccordion from '@/Components/Budget/CategoryAccordion';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import SavingsDashboard from '@/Components/Budget/SavingsDashboard';
+import RateHistoryDashboard from '@/Components/Budget/RateHistoryDashboard';
 import SavingsForm from '@/Components/Budget/SavingsForm';
 import TransferModal from '@/Components/Budget/TransferModal';
-import Dropdown from '@/Components/Dropdown';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet,} from 'lucide-react';
+import Modal from '@/Components/Modal';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -107,11 +109,78 @@ export default function Dashboard() {
     const [editingTransfer, setEditingTransfer] = useState(null);
     const [selectedPool, setSelectedPool] = useState(null);
     const [movementPool, setMovementPool] = useState(null);
-
-
-
-    // View state for swipeable dashboard (0 = Main, 1 = Savings)
+    const [showSettingsModal, setShowSettingsModal] = useState(false);
+    // View state for swipeable dashboard (0 = Main, 1 = Rates, 2 = Savings)
     const [currentViewIndex, setCurrentViewIndex] = useState(0);
+    const [isViewSelectorOpen, setIsViewSelectorOpen] = useState(false);
+    const viewSelectorRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (viewSelectorRef.current && !viewSelectorRef.current.contains(event.target)) {
+                setIsViewSelectorOpen(false);
+            }
+        };
+
+        if (isViewSelectorOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('touchstart', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [isViewSelectorOpen]);
+
+
+
+
+    // BCV rates view (swipe page 1): series fetched lazily per range on first
+    // open and cached per range, so swiping back and forth never refetches.
+    const [rateSeriesByRange, setRateSeriesByRange] = useState({});
+    const [rateLoading, setRateLoading] = useState(false);
+    const [rateError, setRateError] = useState(null);
+    const [rateRange, setRateRange] = useState('180');
+    const [refreshingRate, setRefreshingRate] = useState(false);
+
+    const fetchRateSeries = async (range, force = false) => {
+        if (!force && rateSeriesByRange[range]) return;
+        setRateLoading(true);
+        setRateError(null);
+        try {
+            const { data } = await axios.get(route('exchange-rate.series'), { params: { range } });
+            setRateSeriesByRange((prev) => ({ ...prev, [range]: data.series }));
+        } catch (err) {
+            setRateError(err?.message || 'Error de red');
+        } finally {
+            setRateLoading(false);
+        }
+    };
+
+    const handleRefreshRate = async () => {
+        setRefreshingRate(true);
+        try {
+            await axios.post(route('exchange-rate.refresh'));
+            setRateSeriesByRange({});
+            router.reload({ only: ['rate'] });
+            await fetchRateSeries(rateRange, true);
+        } catch (err) {
+            setRateError(err?.message || 'Error de red');
+        } finally {
+            setRefreshingRate(false);
+        }
+    };
+
+    useEffect(() => {
+        if (currentViewIndex === 1) {
+            fetchRateSeries(rateRange);
+        }
+    }, [currentViewIndex]);
+
+
+
+
 
     // Intersection observer state for bottom category bar
     const [showBottomBar, setShowBottomBar] = useState(false);
@@ -259,16 +328,16 @@ export default function Dashboard() {
         const swipe = Math.abs(offset.x) * velocity.x;
 
         if (swipe < -10000) {
-            // Swipe Left -> Go to Savings
-            if (currentViewIndex === 0) {
+            // Swipe Left -> next view (Main -> Rates -> Savings)
+            if (currentViewIndex < 2) {
                 setDirection(1);
-                setCurrentViewIndex(1);
+                setCurrentViewIndex(currentViewIndex + 1);
             }
         } else if (swipe > 10000) {
-            // Swipe Right -> Go to Main
-            if (currentViewIndex === 1) {
+            // Swipe Right -> previous view
+            if (currentViewIndex > 0) {
                 setDirection(-1);
-                setCurrentViewIndex(0);
+                setCurrentViewIndex(currentViewIndex - 1);
             }
         }
     };
@@ -276,127 +345,102 @@ export default function Dashboard() {
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex justify-between items-center w-full px-4 sm:px-0">
-                    <div className="flex items-center gap-2 overflow-hidden">
+                <div className="flex justify-between items-center w-full px-3 sm:px-0 gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {isNotToday && (
                             <button
                                 onClick={goToToday}
                                 title="Ir a hoy"
-                                className="p-2 shrink-0 text-white hover:bg-white/10 rounded-full transition-all"
+                                className="p-1.5 shrink-0 text-white hover:bg-white/10 rounded-full transition-all"
                             >
-                                <Home size={20} />
+                                <Home size={18} />
                             </button>
                         )}
                         <button
-                            className="flex items-center gap-2 cursor-pointer truncate"
+                            className="flex items-center min-w-0 cursor-pointer text-left"
                             onClick={() => setShowCalendar(true)}
                             title="Elegir mes o día"
                         >
-                            <h2 className="text-xl sm:text-3xl font-black font-serif text-white uppercase tracking-tight truncate">
+                            <h2 className="text-lg sm:text-2xl font-black font-serif text-white uppercase tracking-tight truncate">
                                 {headerLabel}
                             </h2>
                         </button>
                     </div>
 
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-0.5 shrink-0">
+                        {/* Collapsible Dashboard View Switcher */}
+                        <div className="relative" ref={viewSelectorRef}>
+                            {(() => {
+                                const views = [
+                                    { icon: BarChart3, index: 0, title: 'Presupuesto' },
+                                    { icon: TrendingUp, index: 1, title: 'Tasas BCV' },
+                                    { icon: Wallet, index: 2, title: 'Ahorros' },
+                                ];
+                                const activeView = views[currentViewIndex] || views[0];
+                                const ActiveIcon = activeView.icon;
 
-                        <button
-                            onClick={() => {
-                                setDirection(currentViewIndex === 0 ? 1 : -1);
-                                setCurrentViewIndex(currentViewIndex === 0 ? 1 : 0);
-                            }}
-                            className={cn(
-                                "p-2 rounded-full transition-all flex items-center gap-2",
-                                currentViewIndex === 1
-                                    ? "bg-white text-[#FF8A3D] dark:text-[#9B7BFF]"
-                                    : "text-white hover:bg-white/10"
-                            )}
-                            title={currentViewIndex === 0 ? "Ver Ahorros" : "Ver Presupuesto"}
-                        >
-                            <Wallet size={20} />
-                        </button>
-
-                        <button onClick={toggleTheme} className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
-                            {isDark ? <Sun size={24} /> : <Moon size={24} />}
-                        </button>
-                        <Dropdown>
-                            <Dropdown.Trigger>
-                                <button className="p-2 text-white hover:bg-white/10 rounded-full transition-all">
-                                    <SettingsIcon size={24} />
-                                </button>
-                            </Dropdown.Trigger>
-                            <Dropdown.Content
-                                align="right"
-                                width="auto"
-                                contentClasses="py-1 bg-white dark:bg-gray-900"
-                            >
-                                <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                                    Mantenimiento
-                                </span>
-                                <Dropdown.Link as="button" onClick={() => { if(confirm('¿Llenar con datos de prueba? Esto reemplazará los últimos 4 meses.')) router.post(route('settings.seed-mock')) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full">
-                                    Llenar datos de prueba
-                                </Dropdown.Link>
-                                <Dropdown.Link as="button" onClick={() => { if(confirm('¿Limpiar los gastos de ESTE DÍA?')) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter }) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full" disabled={!dateFilter}>
-                                    Limpiar datos del día
-                                </Dropdown.Link>
-                                <Dropdown.Link as="button" onClick={() => { if(confirm(`¿Limpiar todo el mes de ${budget.month_label}?`)) router.post(route('settings.clear-month', budget.month_id)) }} className="dark:text-gray-200 dark:hover:bg-gray-800 text-left w-full">
-                                    Limpiar mes actual
-                                </Dropdown.Link>
-                                <Dropdown.Link as="button" onClick={() => { if(confirm('¡PELIGRO! ¿Borrar TODOS los meses y datos?')) router.post(route('settings.clear')) }} className="text-red-600 dark:hover:bg-gray-800 text-left w-full">
-                                    Limpiar todos los datos
-                                </Dropdown.Link>
-
-                                {auth?.user ? (
+                                return (
                                     <>
-                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-y border-gray-100 dark:border-gray-800 mt-2">
-                                            {auth.user.name}
-                                        </span>
-                                        <Dropdown.Link href={route('profile.edit')} className="dark:text-gray-200 dark:hover:bg-gray-800">
-                                            Mi perfil
-                                        </Dropdown.Link>
-                                        <Dropdown.Link href={route('settings')} className="dark:text-gray-200 dark:hover:bg-gray-800">
-                                            Configuración
-                                        </Dropdown.Link>
-                                        <form
-                                            onSubmit={(e) => {
-                                                e.preventDefault();
-                                                const form = e.target;
-                                                fetch(form.action, {
-                                                    method: 'POST',
-                                                    body: new FormData(form),
-                                                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-                                                    credentials: 'same-origin',
-                                                }).then(() => window.location.reload());
-                                            }}
-                                            action={route('logout')}
-                                            method="POST"
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsViewSelectorOpen((prev) => !prev)}
+                                            className={cn(
+                                                "p-1.5 rounded-full transition-all flex items-center justify-center",
+                                                isViewSelectorOpen
+                                                    ? "bg-white text-[#FF8A3D] dark:text-[#9B7BFF] shadow-sm"
+                                                    : "bg-white/20 text-white hover:bg-white/30"
+                                            )}
+                                            title={`Vista actual: ${activeView.title} (toca para cambiar)`}
+                                            aria-label="Cambiar vista de dashboard"
                                         >
-                                            <button
-                                                type="submit"
-                                                className="block w-full px-4 py-2 text-start text-sm leading-5 text-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 transition duration-150 ease-in-out hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
-                                            >
-                                                Cerrar sesión
-                                            </button>
-                                        </form>
+                                            <ActiveIcon size={18} />
+                                        </button>
+
+                                        {isViewSelectorOpen && (
+                                            <div className="absolute right-0 top-full mt-1.5 p-1 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100">
+                                                {views.map(({ icon: Icon, index, title }) => {
+                                                    const isCurrent = currentViewIndex === index;
+                                                    return (
+                                                        <button
+                                                            key={index}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                if (index !== currentViewIndex) {
+                                                                    setDirection(index > currentViewIndex ? 1 : -1);
+                                                                    setCurrentViewIndex(index);
+                                                                }
+                                                                setIsViewSelectorOpen(false);
+                                                            }}
+                                                            className={cn(
+                                                                "p-2 rounded-xl transition-all flex items-center gap-2 text-xs font-semibold whitespace-nowrap pr-3",
+                                                                isCurrent
+                                                                    ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-sm"
+                                                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                                            )}
+                                                            title={title}
+                                                        >
+                                                            <Icon size={16} className="shrink-0" />
+                                                            <span>{title}</span>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
                                     </>
-                                ) : (
-                                    <>
-                                        <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
-                                            Cuenta (opcional)
-                                        </span>
-                                        <Dropdown.Link href={route('settings')} className="dark:text-gray-200 dark:hover:bg-gray-800">
-                                            Configuración
-                                        </Dropdown.Link>
-                                        <Dropdown.Link href={route('login')} className="dark:text-gray-200 dark:hover:bg-gray-800">
-                                            Iniciar sesión
-                                        </Dropdown.Link>
-                                        <Dropdown.Link href={route('register')} className="dark:text-gray-200 dark:hover:bg-gray-800">
-                                            Crear cuenta
-                                        </Dropdown.Link>
-                                    </>
-                                )}
-                            </Dropdown.Content>
-                        </Dropdown>
+                                );
+                            })()}
+                        </div>
+
+                        <button onClick={toggleTheme} className="p-1.5 text-white hover:bg-white/10 rounded-full transition-all">
+                            {isDark ? <Sun size={20} /> : <Moon size={20} />}
+                        </button>
+                        <button
+                            onClick={() => setShowSettingsModal(true)}
+                            className="p-1.5 text-white hover:bg-white/10 rounded-full transition-all"
+                            aria-label="Abrir menú de configuración"
+                        >
+                            <SettingsIcon size={20} />
+                        </button>
                     </div>
                 </div>
             }
@@ -499,10 +543,10 @@ export default function Dashboard() {
                     </div>
 
                     <div className="mb-4">
-                        <p className="text-2xl font-black font-serif tracking-tight">
+                        <p className="text-2xl font-black font-serif tracking-tight tabular">
                             Bs {totalDebtBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </p>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">
+                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider tabular">
                             $ {budget.income_rate > 0 ? (totalDebtBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
                         </p>
                     </div>
@@ -640,6 +684,47 @@ export default function Dashboard() {
 
                     {currentViewIndex === 1 && (
                         <motion.div
+                            key="rates-dashboard"
+                            custom={direction}
+                            variants={swipeVariants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            transition={{
+                                x: { type: "spring", stiffness: 300, damping: 30 },
+                                opacity: { duration: 0.2 }
+                            }}
+                            drag="x"
+                            dragConstraints={{ left: 0, right: 0 }}
+                            dragElastic={1}
+                            onDragEnd={handleDragEnd}
+                            className="absolute w-full pr-8 space-y-6 pb-24"
+                        >
+                            <RateHistoryDashboard
+                                rate={rate}
+                                points={rateSeriesByRange[rateRange] || null}
+                                loading={rateLoading}
+                                error={rateError}
+                                refreshing={refreshingRate}
+                                range={rateRange}
+                                onRangeChange={(key) => {
+                                    setRateRange(key);
+                                    fetchRateSeries(key);
+                                }}
+                                onRefresh={handleRefreshRate}
+                                onRetry={() => fetchRateSeries(rateRange)}
+                            />
+
+                            <footer className="text-center pb-8">
+                                <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">
+                                    Budget keeper - {version.replace('alpha ', '')}
+                                </p>
+                            </footer>
+                        </motion.div>
+                    )}
+
+                    {currentViewIndex === 2 && (
+                        <motion.div
                             key="savings-dashboard"
                             custom={direction}
                             variants={swipeVariants}
@@ -767,6 +852,46 @@ export default function Dashboard() {
                 )}
 
             </Suspense>
+
+            <Modal
+                show={showSettingsModal}
+                onClose={() => setShowSettingsModal(false)}
+                maxWidth="sm"
+            >
+                <div className="max-h-[80dvh] overflow-y-auto p-4 text-gray-700 dark:text-gray-200">
+                    <div className="mb-4 flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Configuración</h2>
+                            {auth?.user && <p className="text-xs text-gray-400">{auth.user.name}</p>}
+                        </div>
+                        <button onClick={() => setShowSettingsModal(false)} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Cerrar menú">
+                            <X size={20} />
+                        </button>
+                    </div>
+
+                    <div className="space-y-1">
+                        <button disabled={!dateFilter} onClick={() => { setShowSettingsModal(false); if (confirm('¿Limpiar los gastos de ESTE DÍA?')) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter }); }} className="menu-button" disabled:opacity-40>Limpiar datos del día</button>
+                        <button onClick={() => { setShowSettingsModal(false); if (confirm(`¿Limpiar todo el mes de ${budget.month_label}?`)) router.post(route('settings.clear-month', budget.month_id)); }} className="menu-button">Limpiar mes actual</button>
+                        <button onClick={() => { setShowSettingsModal(false); if (confirm('¿Llenar con datos de prueba? Esto reemplazará los últimos 4 meses.')) router.post(route('settings.seed-mock')); }} className="menu-button">Llenar datos de prueba</button>
+                        <button onClick={() => { setShowSettingsModal(false); if (confirm('¡PELIGRO! ¿Borrar TODOS los meses y datos?')) router.post(route('settings.clear')); }} className="menu-button text-red-600 dark:text-red-400">Limpiar todos los datos</button>
+                        <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
+                        <a href={route('settings')} className="menu-button">Configuración</a>
+                        {auth?.user ? (
+                            <>
+                                <a href={route('profile.edit')} className="menu-button">Mi perfil</a>
+                                <form method="POST" action={route('logout')} onSubmit={(event) => { event.preventDefault(); router.post(route('logout')); }}>
+                                    <button type="submit" className="menu-button text-red-600 dark:text-red-400">Cerrar sesión</button>
+                                </form>
+                            </>
+                        ) : (
+                            <>
+                                <a href={route('login')} className="menu-button">Iniciar sesión</a>
+                                <a href={route('register')} className="menu-button">Crear cuenta</a>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </Modal>
 
             <TransferModal
                 show={showTransferModal || editingTransfer !== null || movementPool !== null}

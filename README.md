@@ -112,6 +112,15 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - **Responsive Modals**: Polished all dialog action buttons using `flex-col-reverse` to ensure they seamlessly adapt and stack vertically on narrow Android screens, preventing any squished text or clipping.
 - **Settings Menu**: Updated the Dashboard's floating action menu with a settings icon and wider auto-resizing dropdown box to prevent truncated button text on smaller screens.
 
+### alpha 0.3.1 — BCV Rate History, Compact Header & Navigation Polish
+- **BCV Rate History Dashboard**: Added a dedicated swipeable view (between Main and Savings) displaying real-time BCV exchange rate analytics, interactive historical sparklines/charts across multiple time horizons (30d, 90d, 180d, 1y, all), variation statistics, and on-demand BCV sync with cache invalidation.
+- **Series Endpoint & Caching**: Created a lightweight JSON series endpoint (`/exchange-rate/series`) in `ExchangeRateService` and `BudgetController`, backed by automated feature testing (`ExchangeRateSeriesTest`).
+- **Compact Responsive Header**: Redesigned header controls to prevent truncation of long month names (e.g. `SEPTIEMBRE 2026`) on mobile webviews by optimizing touch padding, adjusting secondary icon sizing, and granting full fluid width to the month label.
+- **Collapsible Vertical View Switcher**: Replaced the static 3-button horizontal pill badge in the header with a dynamic single-button deployer. The focused dashboard icon is displayed by default; tapping it deploys the full view menu vertically in place with smooth transition and click-outside dismissal.
+- **Client Runtime & TDZ Fixes**: Resolved React component initialization and Temporal Dead Zone issues in swipe view state for production Vite bundles.
+- **Android-Centered Dialogs & Settings Menu**: Replaced the settings corner dropdown with a centered floating action menu featuring a blurred backdrop and mobile-safe dismissal. Updated the shared modal system to center dialogs horizontally and vertically at every viewport size while retaining safe padding and scrolling. This consistently centers the month selector, historical-rate picker, debt status, category accordion, and all shared forms in Android WebView and browser layouts.
+
+
 ## Build and Current-Phase Checks
 
 Prerequisites: PHP 8.3+, Node.js, Composer, Java 17+, Android SDK.

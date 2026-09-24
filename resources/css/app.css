@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Design tokens ───────────────────────────────────────────────
+   Minimal financial-app pass: semantic variables so surfaces, ink and
+   positive/negative never drift between components (light + .dark). */
+:root {
+    --surface: #ffffff;
+    --surface-2: #f8fafc;
+    --hairline: #f1f5f9;
+    --ink: #0f172a;
+    --ink-2: #64748b;
+    --ink-3: #94a3b8;
+    --pos: #16a34a;
+    --neg: #dc2626;
+    --warn: #d97706;
+    --brand: #ff8a3d;
+}
+
+.dark {
+    --surface: #0d0d12;
+    --surface-2: #1a1a2e;
+    --hairline: #1f2937;
+    --ink: #f1f5f9;
+    --ink-2: #9ca3af;
+    --ink-3: #6b7280;
+    --pos: #4ade80;
+    --neg: #f87171;
+    --warn: #fbbf24;
+    --brand: #9b7bff;
+}
+
+@layer utilities {
+    /* Aligned, fixed-width digits — essential for money columns. */
+    .tabular {
+        font-variant-numeric: tabular-nums;
+    }
+}

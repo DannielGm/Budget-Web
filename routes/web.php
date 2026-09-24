@@ -18,6 +18,7 @@ Route::get('/', [BudgetController::class, 'index'])->name('dashboard');
 // Manual "refresh BCV rate" endpoint used by the balance card.
 Route::post('/exchange-rate/refresh', [BudgetController::class, 'refreshRate'])->name('exchange-rate.refresh');
 Route::get('/exchange-rate/history', [BudgetController::class, 'historicalRate'])->name('exchange-rate.history');
+Route::get('/exchange-rate/series', [BudgetController::class, 'rateSeries'])->name('exchange-rate.series');
 
 Route::patch('/budgets/{budget}', [BudgetController::class, 'update'])->name('budgets.update');
 Route::post('/categories', [CategoryController::class, 'store'])->name('categories.store');

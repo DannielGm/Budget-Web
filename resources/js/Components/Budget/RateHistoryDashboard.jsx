@@ -1,0 +1,409 @@
+import React, { useMemo, useState } from 'react';
+import { RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { clsx } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+import { fmtPct, fmtRate } from '@/lib/money';
+
+function cn(...inputs) {
+    return twMerge(clsx(inputs));
+}
+
+const RANGES = [
+    { key: '30', label: '1M' },
+    { key: '90', label: '3M' },
+    { key: '180', label: '6M' },
+    { key: '365', label: '1A' },
+    { key: 'all', label: 'Todo' },
+];
+
+const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+const shortDate = (iso) => {
+    const d = new Date(`${iso}T12:00:00`);
+    return `${String(d.getDate()).padStart(2, '0')} ${MONTH_SHORT[d.getMonth()]}`;
+};
+const longDate = (iso) => {
+    const d = new Date(`${iso}T12:00:00`);
+    return `${String(d.getDate()).padStart(2, '0')} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`;
+};
+
+/**
+ * BCV rate history view (swipe page 1). The series arrives with the
+ * backward-carry rule already applied server-side: days with no BCV
+ * publication inherit the closest earlier observation and arrive with
+ * exact=false (drawn dashed in the chart / marked with ≈ in the list).
+ */
+export default function RateHistoryDashboard({
+    rate, points, loading, error, refreshing, range, onRangeChange, onRefresh, onRetry,
+}) {
+    const data = points || [];
+    const last = data.length > 0 ? data[data.length - 1] : null;
+
+    // 1D / 7D / 30D movement against the last point (points are consecutive days).
+    const deltas = useMemo(() => {
+        if (data.length < 8 || !last) return [];
+        const cur = parseFloat(last.rate);
+        const mk = (days, label) => {
+            const back = data[data.length - 1 - days];
+            if (!back) return null;
+            const prev = parseFloat(back.rate);
+            if (!prev) return null;
+            return { label, pct: ((cur - prev) / prev) * 100 };
+        };
+        return [mk(1, '1D'), mk(7, '7D'), data.length > 31 ? mk(30, '30D') : null].filter(Boolean);
+    }, [points]);
+
+    const stats = useMemo(() => {
+        if (data.length === 0) return null;
+        const vals = data.map((p) => parseFloat(p.rate));
+        const min = Math.min(...vals);
+        const max = Math.max(...vals);
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+        const first = vals[0];
+        const pct = first > 0 ? ((vals[vals.length - 1] - first) / first) * 100 : 0;
+        return { min, max, avg, pct };
+    }, [points]);
+
+    const [visibleRows, setVisibleRows] = useState(30);
+    const reversed = useMemo(() => [...data].reverse(), [points]);
+
+    const changeRange = (key) => {
+        setVisibleRows(30);
+        onRangeChange(key);
+    };
+
+    const handleRefresh = () => {
+        setVisibleRows(30);
+        onRefresh();
+    };
+
+    return (
+        <div className="space-y-6">
+            {/* Hero ticker */}
+            <div className="bg-gradient-to-br from-[#1A1A2E] to-[#16213E] rounded-2xl p-5 text-white shadow-xl relative overflow-hidden">
+                <div className="absolute -right-8 -top-10 w-36 h-36 rounded-full bg-white/5" />
+                <div className="absolute -right-2 top-16 w-20 h-20 rounded-full bg-white/5" />
+
+                <div className="flex justify-between items-start mb-3 relative z-10">
+                    <div className="flex items-center gap-2">
+                        <span className="text-white/70 text-[10px] font-black uppercase tracking-[0.2em]">BCV Oficial</span>
+                        {(rate?.stale || rate?.error) && (
+                            <span
+                                className="w-2.5 h-2.5 rounded-full bg-amber-300"
+                                title={rate?.error ? `Error BCV: ${rate.error}` : 'Tasa posiblemente desactualizada'}
+                            />
+                        )}
+                    </div>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        title="Actualizar tasa"
+                        className="bg-white/10 hover:bg-white/20 p-2 rounded-xl backdrop-blur-md transition-colors disabled:opacity-50"
+                    >
+                        <RefreshCw size={16} className={cn(refreshing && 'animate-spin')} />
+                    </button>
+                </div>
+
+                <div className="relative z-10">
+                    <p className="text-4xl font-black font-serif tracking-tight tabular">
+                        {last ? `Bs ${fmtRate(last.rate)}` : '—'}
+                    </p>
+                    <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mt-1">
+                        {last ? `Último dato · ${longDate(last.date)}` : (rate?.date_iso ? longDate(rate.date_iso) : '')}
+                    </p>
+                </div>
+
+                {deltas.length > 0 && (
+                    <div className="flex gap-2 mt-4 relative z-10">
+                        {deltas.map(({ label, pct }) => {
+                            const up = pct >= 0;
+                            return (
+                                <span
+                                    key={label}
+                                    className={cn(
+                                        'flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider tabular',
+                                        up ? 'text-green-400' : 'text-red-400',
+                                    )}
+                                >
+                                    {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                                    {label} {up ? '+' : ''}{fmtPct(pct)}%
+                                </span>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Range selector */}
+            <div className="flex items-center justify-between px-1">
+                <h3 className="font-bold text-lg dark:text-white">Tasa BCV</h3>
+                <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 gap-1">
+                    {RANGES.map(({ key, label }) => (
+                        <button
+                            key={key}
+                            onClick={() => changeRange(key)}
+                            className={cn(
+                                'px-3 py-1 text-xs font-bold rounded-md transition-colors',
+                                range === key
+                                    ? 'bg-white dark:bg-gray-700 text-[#FF8A3D] dark:text-[#9B7BFF] shadow-sm'
+                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300',
+                            )}
+                        >
+                            {label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+            {/* Chart + stats */}
+            {loading ? (
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-3">
+                    <div className="h-4 w-32 bg-gray-100 dark:bg-gray-800 rounded animate-pulse" />
+                    <div className="h-40 bg-gray-50 dark:bg-gray-800/50 rounded-xl animate-pulse" />
+                    <div className="grid grid-cols-4 gap-2">
+                        {[0, 1, 2, 3].map((i) => (
+                            <div key={i} className="h-8 bg-gray-50 dark:bg-gray-800/50 rounded animate-pulse" />
+                        ))}
+                    </div>
+                </div>
+            ) : error ? (
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 text-center space-y-3">
+                    <p className="text-sm font-bold text-gray-400">No se pudo cargar la serie de tasas</p>
+                    <p className="text-[10px] text-gray-300 dark:text-gray-600 font-medium">{error}</p>
+                    <button
+                        onClick={onRetry}
+                        className="text-xs font-black uppercase tracking-widest text-[#FF8A3D] dark:text-[#9B7BFF]"
+                    >
+                        Reintentar
+                    </button>
+                </div>
+            ) : data.length === 0 ? (
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 text-center space-y-3">
+                    <p className="text-sm font-bold text-gray-400">Sin tasas registradas todavía</p>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={refreshing}
+                        className="text-xs font-black uppercase tracking-widest text-[#FF8A3D] dark:text-[#9B7BFF] disabled:opacity-50"
+                    >
+                        {refreshing ? 'Actualizando…' : 'Actualizar desde BCV'}
+                    </button>
+                </div>
+            ) : (
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4">
+                    <RateChart points={data} />
+
+                    {stats && (
+                        <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+                            {[
+                                ['Mín', fmtRate(stats.min)],
+                                ['Máx', fmtRate(stats.max)],
+                                ['Prom', fmtRate(stats.avg)],
+                                ['Δ', `${stats.pct >= 0 ? '+' : ''}${fmtPct(stats.pct)}%`],
+                            ].map(([label, value]) => (
+                                <div key={label} className="text-center">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">{label}</p>
+                                    <p className="text-xs font-black dark:text-white tabular">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <div className="flex gap-4 mt-2 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                        <span className="flex items-center gap-1">
+                            <span className="w-4 h-[2px] bg-[#FF8A3D] dark:bg-[#9B7BFF] rounded" /> BCV publicado
+                        </span>
+                        <span className="flex items-center gap-1">
+                            <span className="w-4 border-t-2 border-dashed border-gray-300 dark:border-gray-600" /> Arrastrado
+                        </span>
+                    </div>
+                </div>
+            )}
+            {/* Daily history */}
+            {!loading && !error && data.length > 0 && (
+                <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4">
+                    <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400 mb-3">Historial diario</h4>
+                    <div>
+                        {reversed.slice(0, visibleRows).map((p, idx) => {
+                            const chronoIdx = data.length - 1 - idx;
+                            const prev = chronoIdx > 0 ? parseFloat(data[chronoIdx - 1].rate) : null;
+                            const cur = parseFloat(p.rate);
+                            const diff = prev !== null ? cur - prev : 0;
+                            return (
+                                <div
+                                    key={p.date}
+                                    className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+                                >
+                                    <span
+                                        className={cn(
+                                            'text-xs font-medium tabular',
+                                            p.exact ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600',
+                                        )}
+                                    >
+                                        {p.exact ? '' : '≈ '}{shortDate(p.date)}
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                        <span
+                                            className={cn(
+                                                'text-xs font-black tabular',
+                                                p.exact ? 'text-gray-700 dark:text-gray-200' : 'text-gray-400 dark:text-gray-600',
+                                            )}
+                                        >
+                                            {fmtRate(p.rate)}
+                                        </span>
+                                        <span
+                                            className={cn(
+                                                'text-[10px] font-bold tabular w-16 text-right',
+                                                diff > 0 ? 'text-green-500'
+                                                    : diff < 0 ? 'text-red-500'
+                                                        : 'text-gray-300 dark:text-gray-600',
+                                            )}
+                                        >
+                                            {diff === 0 || prev === null ? '—' : `${diff > 0 ? '+' : ''}${fmtRate(diff)}`}
+                                        </span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {reversed.length > visibleRows && (
+                        <button
+                            onClick={() => setVisibleRows(visibleRows + 60)}
+                            className="w-full mt-3 py-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-[#FF8A3D] dark:hover:text-[#9B7BFF] transition-colors"
+                        >
+                            Ver más ({reversed.length - visibleRows})
+                        </button>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+/**
+ * Hand-rolled SVG area chart — no recharts so the initial bundle stays lean.
+ * Carried-forward (non-exact) segments are drawn dashed: the visual honesty
+ * of the backward-carry rule.
+ */
+function RateChart({ points }) {
+    const W = 600;
+    const H = 190;
+    const PAD = { t: 16, r: 46, b: 24, l: 6 };
+    const [hover, setHover] = useState(null);
+
+    const geom = useMemo(() => {
+        if (points.length < 2) return null;
+        const vals = points.map((p) => parseFloat(p.rate));
+        let min = Math.min(...vals);
+        let max = Math.max(...vals);
+        if (max - min < 1e-9) {
+            max += 1;
+            min -= 1;
+        }
+        const span = max - min;
+        const x = (i) => PAD.l + (i / (points.length - 1)) * (W - PAD.l - PAD.r);
+        const y = (v) => PAD.t + (1 - (v - min) / span) * (H - PAD.t - PAD.b);
+
+        let solid = '';
+        let dashed = '';
+        let area = `M ${x(0)} ${y(vals[0])}`;
+        for (let i = 1; i < points.length; i++) {
+            const seg = `M ${x(i - 1)} ${y(vals[i - 1])} L ${x(i)} ${y(vals[i])}`;
+            if (points[i].exact) solid += seg;
+            else dashed += seg;
+            area += ` L ${x(i)} ${y(vals[i])}`;
+        }
+        area += ` L ${x(points.length - 1)} ${H - PAD.b} L ${x(0)} ${H - PAD.b} Z`;
+
+        const gridVals = [min + span * 0.06, min + span * 0.5, max - span * 0.06];
+        const last = points.length - 1;
+        const tickIdx = [...new Set([0, Math.floor(last / 3), Math.floor((last * 2) / 3), last])];
+
+        return { x, y, solid, dashed, area, gridVals, tickIdx };
+    }, [points]);
+
+    if (!geom) {
+        return <p className="text-center text-xs font-bold text-gray-400 py-8">Datos insuficientes para la gráfica</p>;
+    }
+
+    const nearestIndex = (clientX, rect) => {
+        const px = ((clientX - rect.left) / rect.width) * W;
+        const t = (px - PAD.l) / (W - PAD.l - PAD.r);
+        return Math.round(Math.min(1, Math.max(0, t)) * (points.length - 1));
+    };
+
+    const hp = hover !== null ? points[hover] : null;
+
+    return (
+        <div className="relative select-none">
+            <svg
+                viewBox={`0 0 ${W} ${H}`}
+                className="w-full h-auto"
+                onPointerMove={(e) => setHover(nearestIndex(e.clientX, e.currentTarget.getBoundingClientRect()))}
+                onPointerDown={(e) => setHover(nearestIndex(e.clientX, e.currentTarget.getBoundingClientRect()))}
+                onPointerLeave={() => setHover(null)}
+            >
+                <defs>
+                    <linearGradient id="rateAreaFill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.28" />
+                        <stop offset="100%" stopColor="var(--brand)" stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+
+                {geom.gridVals.map((v, i) => (
+                    <g key={i}>
+                        <line
+                            x1={PAD.l} x2={W - PAD.r} y1={geom.y(v)} y2={geom.y(v)}
+                            stroke="var(--hairline)" strokeWidth="1" strokeDasharray="2 4"
+                        />
+                        <text
+                            x={W - PAD.r + 6} y={geom.y(v) + 3} fontSize="9" fontWeight="700"
+                            fill="var(--ink-3)" className="tabular"
+                        >
+                            {fmtRate(v)}
+                        </text>
+                    </g>
+                ))}
+
+                <path d={geom.area} fill="url(#rateAreaFill)" />
+                <path
+                    d={geom.solid} fill="none" stroke="var(--brand)" strokeWidth="2.5"
+                    strokeLinejoin="round" strokeLinecap="round"
+                />
+                <path
+                    d={geom.dashed} fill="none" stroke="var(--brand)" strokeWidth="2"
+                    strokeDasharray="3 4" strokeLinecap="round" opacity="0.55"
+                />
+
+                {geom.tickIdx.map((i) => (
+                    <text
+                        key={i} x={geom.x(i)} y={H - 8} fontSize="9" fontWeight="700"
+                        fill="var(--ink-3)"
+                        textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
+                    >
+                        {shortDate(points[i].date)}
+                    </text>
+                ))}
+
+                {hp && hover !== null && (
+                    <g>
+                        <line
+                            x1={geom.x(hover)} x2={geom.x(hover)} y1={PAD.t} y2={H - PAD.b}
+                            stroke="var(--ink-3)" strokeWidth="1" strokeDasharray="2 3"
+                        />
+                        <circle
+                            cx={geom.x(hover)} cy={geom.y(parseFloat(hp.rate))} r="4"
+                            fill="var(--brand)" stroke="white" strokeWidth="1.5"
+                        />
+                    </g>
+                )}
+            </svg>
+
+            {hp && hover !== null && (
+                <div
+                    className="absolute top-0 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg pointer-events-none tabular whitespace-nowrap"
+                    style={{ left: `${Math.min(72, Math.max(0, (geom.x(hover) / W) * 100 - 14))}%` }}
+                >
+                    {shortDate(hp.date)} · Bs {fmtRate(hp.rate)}{hp.exact ? '' : ' ≈'}
+                </div>
+            )}
+        </div>
+    );
+}

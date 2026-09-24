@@ -191,6 +191,92 @@ class ExchangeRateService
             ->isAfter(CarbonImmutable::now()->subSeconds(self::FETCH_RETRY_AFTER_SECONDS));
     }
 
+    /**
+     * Daily rate series from $from..$to (inclusive) for the rates dashboard.
+     * Days without their own BCV publication inherit the closest earlier
+     * observation (backward carry); days before the first known rate are
+     * omitted. Points: ['date' => 'Y-m-d', 'rate' => string, 'exact' => bool].
+     */
+    public function rateSeries(string $from, string $to): array
+    {
+        if ($from > $to) {
+            return [];
+        }
+
+        $observations = ExchangeRate::whereBetween('date_iso', [$from, $to])
+            ->orderBy('date_iso')
+            ->get()
+            ->keyBy('date_iso');
+
+        // Seed the carry with the closest observation BEFORE the window so a
+        // window starting inside a gap still shows the last real rate.
+        $carry = ExchangeRate::where('date_iso', '<', $from)
+            ->orderBy('date_iso', 'desc')
+            ->first();
+
+        $series = [];
+        $day = CarbonImmutable::parse($from);
+        $last = CarbonImmutable::parse($to);
+
+        while ($day->lte($last)) {
+            $iso = $day->toDateString();
+
+            if (isset($observations[$iso])) {
+                $carry = $observations[$iso];
+                $exact = true;
+            } else {
+                $exact = false;
+            }
+
+            if ($carry !== null) {
+                $series[] = [
+                    'date' => $iso,
+                    'rate' => $carry->rate_bs_per_usd,
+                    'exact' => $exact,
+                ];
+            }
+
+            $day = $day->addDay();
+        }
+
+        return $series;
+    }
+
+    /**
+     * The closest observation on or before the given day — the same
+     * backward-carry rule as rateSeries(), for single-day consumers
+     * (the budget calendar's day picker).
+     */
+    public function latestOnOrBefore(string $date): ?ExchangeRate
+    {
+        return ExchangeRate::where('date_iso', '<=', $date)
+            ->orderBy('date_iso', 'desc')
+            ->first();
+    }
+
+    /**
+     * Fetch the full public BCV archive once (guarded so the rates dashboard's
+     * "Todo" range can ask for it on every visit without hammering the API).
+     * Fails soft: on error the existing rows are served as-is.
+     */
+    public function ensureFullArchive(): void
+    {
+        $last = Cache::get('exchange_rate:full_archive_attempted_at');
+        if ($last !== null && CarbonImmutable::createFromTimestamp((int) $last)
+            ->isAfter(CarbonImmutable::now()->subSeconds(21600))) {
+            return;
+        }
+
+        Cache::put('exchange_rate:full_archive_attempted_at', CarbonImmutable::now()->getTimestamp(), 86400);
+
+        try {
+            // '1990-01-01' accepts every entry the public history endpoint has.
+            $this->fetchHistory('1990-01-01');
+        } catch (Throwable $e) {
+            Log::warning('exchange-rate: full archive fetch failed: '.$e->getMessage());
+        }
+    }
+
     private function fetchOfficial(string $today): void
     {
         $payload = $this->getJson(self::OFFICIAL_URL);

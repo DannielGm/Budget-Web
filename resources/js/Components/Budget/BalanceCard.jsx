@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import { useForm } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { fmtBs, fmtUsd } from '@/lib/money';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -34,7 +35,7 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
             <div className="flex justify-between items-start mb-2">
                 <span className="text-white/80 text-sm font-medium">Saldo Disponible</span>
                 <div className="flex items-center gap-2">
-                    <span className="text-white/80 text-xs font-medium">{parseFloat(budget.income_rate || 0).toLocaleString('es-ES')} Bs/USD</span>
+                    <span className="text-white/80 text-xs font-medium tabular">{parseFloat(budget.income_rate || 0).toLocaleString('es-ES')} Bs/USD</span>
                     {rate?.error && (
                         <span className="w-2.5 h-2.5 rounded-full bg-amber-300" title={`Error BCV: ${rate.error}`} />
                     )}
@@ -50,11 +51,11 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
             </div>
 
             <div className="mb-1">
-                <h1 className="text-4xl font-black font-serif tracking-tight">
-                    $ {balanceUsd.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumLines: 2 })}
+                <h1 className="text-4xl font-black font-serif tracking-tight tabular">
+                    $ {fmtUsd(balanceUsd)}
                 </h1>
-                <p className="text-white/90 text-xl font-bold">
-                    Bs {balanceBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumLines: 2 })}
+                <p className="text-white/90 text-xl font-bold tabular">
+                    Bs {fmtBs(balanceBs)}
                 </p>
             </div>
 
@@ -63,11 +64,11 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
             <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                     <span className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Ingresos</span>
-                    <p className="text-sm font-bold">Bs {parseFloat(budget.income_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-sm font-bold tabular">Bs {fmtBs(budget.income_bs)}</p>
                 </div>
                 <div className="text-right">
                     <span className="text-white/70 text-[10px] uppercase font-bold tracking-wider">Gastos</span>
-                    <p className="text-sm font-bold">Bs {calculateCashExpenses(budget).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                    <p className="text-sm font-bold tabular">Bs {fmtBs(calculateCashExpenses(budget))}</p>
                 </div>
             </div>
 

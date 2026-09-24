@@ -6,8 +6,16 @@ use App\Models\Budget;
 use App\Services\BudgetService;
 use App\Services\ExchangeRateService;
 use Carbon\CarbonImmutable;
+use App\Models\Category;
+use App\Models\Debt;
+use App\Models\ExchangeRate;
+use App\Models\Expense;
+use App\Models\SavingTransaction;
 use App\Support\NativeCapabilities;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -89,6 +97,9 @@ class BudgetController extends Controller
     {
         $snapshot = $this->rateService->ensureFresh(true);
 
+        // Bust the series cache so the rates view shows the fresh figure.
+        Cache::put('rate-series:generation', (int) Cache::get('rate-series:generation', 1) + 1);
+
         return back()->with('rate_snapshot', $snapshot);
     }
 
@@ -98,10 +109,51 @@ class BudgetController extends Controller
             'date' => 'required|date_format:Y-m-d',
         ]);
 
-        $rate = $this->rateService->dayRate($validated['date']);
+        // Days without their own BCV publication inherit the closest earlier
+        // observation (backward carry), same rule as the rates dashboard.
+        $rate = $this->rateService->latestOnOrBefore($validated['date']);
 
         return response()->json([
             'rate' => $rate?->rate_bs_per_usd ?? '0'
+        ]);
+    }
+
+    /**
+     * Daily BCV series for the rates dashboard. Days with no publication
+     * carry the closest earlier rate (ExchangeRateService::rateSeries).
+     * range: 30|90|180|365 days, or "all" (asks for the full public archive).
+     */
+    public function rateSeries(Request $request)
+    {
+        $validated = $request->validate([
+            'range' => 'nullable|in:30,90,180,365,all',
+        ]);
+
+        $range = (string) ($validated['range'] ?? '180');
+        $to = CarbonImmutable::today()->toDateString();
+
+        if ($range === 'all') {
+            // Ask the API for the complete archive (guarded to 1 attempt / 6h),
+            // then serve everything we hold.
+            $this->rateService->ensureFullArchive();
+            $first = ExchangeRate::orderBy('date_iso')->value('date_iso');
+            $from = $first ?? $to;
+        } else {
+            $from = CarbonImmutable::today()->subDays(min((int) $range, 1500) - 1)->toDateString();
+        }
+
+        $generation = (int) Cache::get('rate-series:generation', 1);
+        $series = Cache::remember(
+            'rate-series:'.$generation.':'.$from.':'.$to,
+            300,
+            fn () => $this->rateService->rateSeries($from, $to)
+        );
+
+        return response()->json([
+            'from' => $from,
+            'to' => $to,
+            'series' => $series,
+            'first_date' => $series[0]['date'] ?? null,
         ]);
     }
 
