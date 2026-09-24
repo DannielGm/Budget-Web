@@ -104,14 +104,13 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - **USD Equivalence Display**: Added USD equivalent text indicators (converted using the month's active BCV rate) below individual debts, the "Compras a crédito" row, and the category "Total" sum in the main dashboard view.
 - **Theme Persistence & Native Detection**: Dark/Light mode selection is now saved in `localStorage` across app reloads. The `<head>` now features a zero-FOUC (Flash of Unstyled Content) inline script that automatically queries the device's system-level theme via `prefers-color-scheme`. When packaged with NativePHP, the Android WebView passes the OS-level Dark/Light mode preference down to the app, establishing the correct default theme on first launch.
 
-### alpha 0.2.9.5 — Credit Sub-Categories & bugfixes
+### alpha 0.3.0 — Sub-Categories & UI Polish
 - **Debt Category Linking**: Added a `debt_id` foreign key to `categories`. Users can now link any "Crédito" category directly to a specific named Debt bucket (e.g. linking the "Supermarket" category directly to the "Zinli Card" debt).
 - **Dynamic Debt Tracking**: Reworked the entire Debt mathematical engine in `Budget.php` and `BudgetService.php`. Unlinked credit categories continue to accumulate into a global "Compras a crédito" fallback bucket, while linked credit categories now intelligently add directly to their assigned debt's balance in real-time.
 - **Debt UX Enhancements**: Enabled creating and editing named Debt buckets via a fully functional modal directly from the Debt badge '+' icon. Made the "Monto Inicial" optional during creation, allowing users to create empty debt buckets specifically to act as destinations for credit categories. Added visual badges on the debt card showing exactly how much new debt was accumulated ("Nuevos cargos") under a specific bucket during the active month.
-
-## Planned Alphas
-
-### alpha 0.3.0 — 
+- **Daily BCV Sync**: Implemented a "Tasa Diaria BCV" toggle directly in the Budget configuration form, giving the user control to lock the budget's rate to the absolute latest fetched BCV exchange rate.
+- **Responsive Modals**: Polished all dialog action buttons using `flex-col-reverse` to ensure they seamlessly adapt and stack vertically on narrow Android screens, preventing any squished text or clipping.
+- **Settings Menu**: Updated the Dashboard's floating action menu with a settings icon and wider auto-resizing dropdown box to prevent truncated button text on smaller screens.
 
 ## Build and Current-Phase Checks
 

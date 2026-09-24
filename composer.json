@@ -12,6 +12,8 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "nativephp/mobile": "^4.5",
+        "nativephp/mobile-share": "1.0",
+        "smronju/nativephp-document-picker": "1.1",
         "tightenco/ziggy": "^2.0",
         "vlucas/phpdotenv": "^5.7"
     },

@@ -7,6 +7,7 @@ use App\Models\ExchangeRate;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
 
@@ -31,6 +32,8 @@ class ExchangeRateService
 
     private const BACKFILL_RETRY_AFTER_SECONDS = 300;
 
+    private const FETCH_RETRY_AFTER_SECONDS = 600;
+
     /**
      * Ensure today's rate exists, then run maintenance. Returns a snapshot
      * for the balance card; never throws.
@@ -47,7 +50,13 @@ class ExchangeRateService
             try {
                 $needsFetch = $force || ! ExchangeRate::whereKey($today)->exists();
 
+                // Backoff: never let a failing/slow network stall every page load.
+                if ($needsFetch && ! $force && $this->fetchAttemptedRecently()) {
+                    $needsFetch = false;
+                }
+
                 if ($needsFetch) {
+                    Cache::put('exchange_rate:last_fetch_attempt_at', CarbonImmutable::now()->getTimestamp(), 3600);
                     $this->fetchOfficial($today);
                     // Backfill the public history only when we fetched official
                     // data: this populates each month's boundary day so
@@ -60,6 +69,7 @@ class ExchangeRateService
                 $this->refreshMonthRates();
             } catch (Throwable $e) {
                 $error = $e->getMessage();
+                Log::warning('exchange-rate: '.$e->getMessage());
             }
 
             $latest = ExchangeRate::orderBy('date_iso', 'desc')->first();
@@ -173,6 +183,14 @@ class ExchangeRateService
         $this->fetchHistory($firstDay);
     }
 
+    private function fetchAttemptedRecently(): bool
+    {
+        $last = Cache::get('exchange_rate:last_fetch_attempt_at');
+
+        return $last !== null && CarbonImmutable::createFromTimestamp((int) $last)
+            ->isAfter(CarbonImmutable::now()->subSeconds(self::FETCH_RETRY_AFTER_SECONDS));
+    }
+
     private function fetchOfficial(string $today): void
     {
         $payload = $this->getJson(self::OFFICIAL_URL);
@@ -215,7 +233,7 @@ class ExchangeRateService
 
     private function getJson(string $url): array
     {
-        $response = Http::timeout(3)->connectTimeout(3)
+        $response = Http::timeout(2)->connectTimeout(2)
             ->acceptJson()
             ->get($url);
 

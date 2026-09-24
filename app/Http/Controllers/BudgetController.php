@@ -6,6 +6,7 @@ use App\Models\Budget;
 use App\Services\BudgetService;
 use App\Services\ExchangeRateService;
 use Carbon\CarbonImmutable;
+use App\Support\NativeCapabilities;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -116,6 +117,11 @@ class BudgetController extends Controller
             'months' => $months,
             'monthIds' => $months->pluck('month_id'),
             'version' => config('budget.version'),
+
+            // Which backup transports this build can reach. Probed here rather
+            // than shared globally: it costs a bridge round-trip on a device and
+            // only this page ever asks.
+            'native' => NativeCapabilities::detect(),
         ]);
     }
 

@@ -55,6 +55,12 @@ const Content = ({
 
     if (width === '48') {
         widthClasses = 'w-48 max-w-full';
+    } else if (width === '64') {
+        widthClasses = 'w-64 max-w-full';
+    } else if (width === 'auto') {
+        widthClasses = 'w-auto max-w-full whitespace-nowrap';
+    } else {
+        widthClasses = width;
     }
 
     return (

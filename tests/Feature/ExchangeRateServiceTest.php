@@ -125,7 +125,7 @@ class ExchangeRateServiceTest extends TestCase
 
         app(ExchangeRateService::class)->ensureFresh();
 
-        $this->assertSame('240.00', (string) $budget->fresh()->income_rate);
+        $this->assertSame('250.50', (string) $budget->fresh()->income_rate);
     }
 
     public function test_offline_second_run_never_wipes_a_saved_rate(): void
@@ -140,12 +140,12 @@ class ExchangeRateServiceTest extends TestCase
         ]);
 
         app(ExchangeRateService::class)->ensureFresh();
-        $this->assertSame('240.00', (string) $budget->fresh()->income_rate);
+        $this->assertSame('250.50', (string) $budget->fresh()->income_rate);
 
         Http::fake(['ve.dolarapi.com/*' => Http::response('unreachable', 500)]);
         \Cache::flush();
         app(ExchangeRateService::class)->ensureFresh();
 
-        $this->assertSame('240.00', (string) $budget->fresh()->income_rate);
+        $this->assertSame('250.50', (string) $budget->fresh()->income_rate);
     }
 }

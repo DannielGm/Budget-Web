@@ -34,6 +34,10 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'flash' => fn () => [
+                'backup_export' => $request->session()->get('backup_export'),
+                'backup_import' => $request->session()->get('backup_import'),
+            ],
         ];
     }
 }

@@ -2,7 +2,6 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import { Head, usePage, router } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import BalanceCard from '@/Components/Budget/BalanceCard';
-import BudgetGraph from '@/Components/Budget/BudgetGraph';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
@@ -20,6 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
 const SavingsPoolSummaryModal = lazy(() => import('@/Components/Budget/SavingsPoolSummaryModal'));
+const BudgetGraph = lazy(() => import('@/Components/Budget/BudgetGraph'));
 
 const MONTH_SHORT = [
     'ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -327,6 +327,7 @@ export default function Dashboard() {
                             </Dropdown.Trigger>
                             <Dropdown.Content
                                 align="right"
+                                width="auto"
                                 contentClasses="py-1 bg-white dark:bg-gray-900"
                             >
                                 <span className="block px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-400 border-b border-gray-100 dark:border-gray-800">
@@ -467,14 +468,16 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    <BudgetGraph
-                        budget={budget}
-                        categories={visibleCategories}
-                        rangeMode={rangeMode}
-                        dateFilter={dateFilter}
-                        today={today}
-                        savingsLedger={savingsLedger || []}
-                    />
+                    <Suspense fallback={<div className="h-48 flex items-center justify-center text-xs font-bold uppercase tracking-widest text-gray-400">Cargando gráfico…</div>}>
+                        <BudgetGraph
+                            budget={budget}
+                            categories={visibleCategories}
+                            rangeMode={rangeMode}
+                            dateFilter={dateFilter}
+                            today={today}
+                            savingsLedger={savingsLedger || []}
+                        />
+                    </Suspense>
                 </div>
 
                 {/* Deuda Card */}

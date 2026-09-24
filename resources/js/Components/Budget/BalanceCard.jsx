@@ -35,6 +35,9 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
                 <span className="text-white/80 text-sm font-medium">Saldo Disponible</span>
                 <div className="flex items-center gap-2">
                     <span className="text-white/80 text-xs font-medium">{parseFloat(budget.income_rate || 0).toLocaleString('es-ES')} Bs/USD</span>
+                    {rate?.error && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-amber-300" title={`Error BCV: ${rate.error}`} />
+                    )}
                     <button
                         onClick={refreshRate}
                         disabled={processing}

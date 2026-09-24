@@ -51,6 +51,15 @@ Route::delete('/transfers/{transfer}', [TransferController::class, 'destroy'])->
 Route::get('/export', [ExportController::class, 'export'])->name('export');
 Route::post('/import', [ExportController::class, 'import'])->name('import');
 
+// File transport for the compiled mobile build. Its WebView can neither save a
+// downloaded response nor open a file input, so the backup is written into the
+// app's own storage and handed to the OS Save-As dialog / share sheet instead,
+// and the chosen file comes back through a native event listener rather than a
+// request body.
+Route::post('/backup/export', [ExportController::class, 'exportNative'])->name('backup.export');
+Route::post('/backup/import/pick', [ExportController::class, 'pickImportFile'])->name('backup.import.pick');
+Route::get('/backup/status', [ExportController::class, 'status'])->name('backup.status');
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
