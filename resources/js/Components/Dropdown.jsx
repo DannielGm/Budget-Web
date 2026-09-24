@@ -46,9 +46,9 @@ const Content = ({
     let alignmentClasses = 'origin-top';
 
     if (align === 'left') {
-        alignmentClasses = 'ltr:origin-top-left rtl:origin-top-right start-0';
+        alignmentClasses = 'origin-top-left left-0';
     } else if (align === 'right') {
-        alignmentClasses = 'ltr:origin-top-right rtl:origin-top-left end-0';
+        alignmentClasses = 'origin-top-right right-0';
     }
 
     let widthClasses = '';
