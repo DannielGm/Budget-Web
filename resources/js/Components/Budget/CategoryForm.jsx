@@ -8,9 +8,11 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router, usePage } from '@inertiajs/react';
 import { CreditCard } from 'lucide-react';
+import { useConfirm } from '@/Components/ConfirmationProvider';
 
 export default function CategoryForm({ show, onClose, category, monthId }) {
     const { budget } = usePage().props;
+    const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         name: category?.name || '',
         month_id: monthId,
@@ -80,12 +82,16 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
         }
     };
 
-    const handleDelete = () => {
-        if (confirm(`¿Estás seguro de eliminar la categoría "${category.name}" y TODOS sus gastos?`)) {
-            router.delete(route('categories.destroy', category.id), {
-                onSuccess: () => onClose(),
-            });
-        }
+    const handleDelete = async () => {
+        const confirmed = await confirmAction({
+            title: 'Eliminar categoría',
+            message: `Se eliminará “${category.name}” y todos sus gastos.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar categoría',
+            tone: 'danger',
+        });
+        if (!confirmed) return;
+        router.delete(route('categories.destroy', category.id), { onSuccess: () => onClose() });
     };
 
     const handleClose = () => {

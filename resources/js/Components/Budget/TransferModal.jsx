@@ -8,6 +8,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router } from '@inertiajs/react';
 import { ArrowDownToLine, ArrowUpFromLine, Trash2 } from 'lucide-react';
+import { useConfirm } from '@/Components/ConfirmationProvider';
 
 const POOL_LABELS = { Digital: 'Digital', Bank: 'Banco', Physical: 'Físico' };
 const POOLS = ['Digital', 'Bank', 'Physical'];
@@ -23,6 +24,7 @@ const EXTERNAL = 'Externo';
  * use non-official rates), never from BCV.
  */
 export default function TransferModal({ show, onClose, monthId, transfer = null, pool = null }) {
+    const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         month_id: monthId,
         source_type: 'cash',
@@ -148,14 +150,18 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
         }
     };
 
-    const handleDelete = () => {
-        if (!window.confirm('¿Eliminar este movimiento? Los saldos se revertirán.')) return;
-
+    const handleDelete = async () => {
+        if (!isEditing) return;
+        const confirmed = await confirmAction({
+            title: 'Eliminar movimiento',
+            message: 'Se eliminará este movimiento de transferencia.',
+            detail: 'Los saldos de efectivo y ahorro se revertirán automáticamente.',
+            confirmLabel: 'Eliminar movimiento',
+            tone: 'danger',
+        });
+        if (!confirmed) return;
         router.delete(route('transfers.destroy', transfer.id), {
-            onSuccess: () => {
-                reset();
-                onClose();
-            },
+            onSuccess: () => { reset(); onClose(); },
         });
     };
 

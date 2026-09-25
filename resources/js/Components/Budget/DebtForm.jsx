@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
@@ -8,28 +8,24 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { useForm, router } from '@inertiajs/react';
-import { ChevronDown, ChevronUp, Trash2, Calendar as CalendarIcon } from 'lucide-react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { Trash2 } from 'lucide-react';
+import { useConfirm } from '@/Components/ConfirmationProvider';
+import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
+import { calculateDebt, n } from '@/lib/debtMath';
 
-function cn(...inputs) {
-    return twMerge(clsx(inputs));
-}
+const pad = (value) => String(value).padStart(2, '0');
+const paymentDate = (ms) => {
+    const d = new Date(Number(ms));
+    return isNaN(d.getTime()) ? '--/--/----' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+};
+const tabs = [
+    { id: 'details', label: 'Datos' },
+    { id: 'payment', label: 'Registrar pago' },
+    { id: 'history', label: 'Historial' },
+];
 
-const pad = (n) => String(n).padStart(2, '0');
-
-function formatTimestamp(ms) {
-    if (!ms) return '--/--/----';
-    try {
-        const d = new Date(ms);
-        if (isNaN(d.getTime())) return '--/--/----';
-        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${d.getFullYear()}`;
-    } catch (e) {
-        return '--/--/----';
-    }
-}
-
-export default function DebtForm({ show, onClose, debt = null, monthId }) {
+export default function DebtForm({ show, onClose, debt = null, monthId, rate = 0 }) {
+    const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         month_id: monthId,
         label: debt?.label || '',
@@ -39,286 +35,110 @@ export default function DebtForm({ show, onClose, debt = null, monthId }) {
         additive_method: 'Transferencia',
         additive_timestamp: Date.now(),
     });
-
-    const [isAdditive, setIsAdditive] = useState(false);
-    const [showHistory, setShowHistory] = useState(false);
+    const [mode, setMode] = useState('details');
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [isAdditive, setIsAdditive] = useState(false);
 
-    transform((data) => ({
-        ...data,
-        additive_amount: isAdditive ? data.additive_amount : null,
+    transform((values) => ({
+        ...values,
+        additive_amount: isAdditive ? values.additive_amount : null,
+        additive_method: isAdditive ? values.additive_method : null,
+        additive_timestamp: isAdditive ? values.additive_timestamp : null,
     }));
 
     useEffect(() => {
-        if (debt) {
-            setData({
-                month_id: monthId,
-                label: debt.label,
-                opening_bs: debt.opening_bs,
-                payment_bs: debt.payment_bs,
-                additive_amount: '',
-                additive_method: 'Transferencia',
-                additive_timestamp: Date.now(),
-            });
-            setIsAdditive(false); // Default to false so "Pago inicial" is visible
-            setShowHistory(false);
-        } else {
-            reset();
-            setData('month_id', monthId);
-        }
+        if (!show) return;
+        reset();
+        setData({
+            month_id: monthId,
+            label: debt?.label || '',
+            opening_bs: debt?.opening_bs || '',
+            payment_bs: debt?.payment_bs || '',
+            additive_amount: '',
+            additive_method: 'Transferencia',
+            additive_timestamp: Date.now(),
+        });
+        setMode('details');
+        setIsAdditive(false);
+        clearErrors();
     }, [debt, monthId, show]);
 
-    const submit = (e) => {
-        e.preventDefault();
+    const summary = useMemo(() => calculateDebt({
+        ...(debt || {}),
+        opening_bs: data.opening_bs,
+        payment_bs: debt?.payment_bs || 0,
+        credit_expenses_bs: debt?.credit_expenses_bs || 0,
+        payments: debt?.payments || [],
+    }, rate), [data.opening_bs, debt, rate]);
+    const additive = isAdditive ? n(data.additive_amount) : 0;
+    const remainingAfterPayment = Math.max(0, summary.remainingBs - additive);
+    const amountUsd = n(rate) > 0 ? n(data.additive_amount) / n(rate) : 0;
 
-        if (debt) {
-            patch(route('debts.update', debt.id), {
-                onSuccess: () => {
-                    reset();
-                    onClose();
-                },
-            });
-        } else {
-            post(route('debts.store'), {
-                onSuccess: () => {
-                    reset();
-                    onClose();
-                },
-            });
-        }
+    const close = () => { clearErrors(); reset(); onClose(); };
+    const submit = (event) => {
+        event.preventDefault();
+        const options = { onSuccess: close };
+        if (debt) patch(route('debts.update', debt.id), options);
+        else post(route('debts.store'), options);
     };
-
-    const handleDeleteDebt = () => {
-        if (confirm(`¿Estás seguro de eliminar la deuda "${debt.label}" y TODOS sus pagos?`)) {
-            router.delete(route('debts.destroy', debt.id), {
-                onSuccess: () => onClose(),
-            });
-        }
+    const removeDebt = async () => {
+        const confirmed = await confirmAction({
+            title: 'Eliminar deuda',
+            message: `Se eliminará “${debt.label}” y todo su historial de pagos.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar deuda',
+            tone: 'danger',
+        });
+        if (confirmed) router.delete(route('debts.destroy', debt.id), { onSuccess: close });
     };
-
-    const handleDeletePayment = (paymentId) => {
-        if (confirm("¿Borrar este pago?")) {
-            router.delete(route('debt-payments.destroy', paymentId), { preserveScroll: true });
-        }
-    };
-
-    const getRestante = () => {
-        const opening = parseFloat(data.opening_bs) || 0;
-        if (!debt) {
-            const currentPayment = parseFloat(data.payment_bs) || 0;
-            return opening - currentPayment;
-        }
-
-        if (isAdditive) {
-            const currentPayment = parseFloat(debt?.payment_bs || 0);
-            const additive = parseFloat(data.additive_amount) || 0;
-            return opening - currentPayment - additive;
-        } else {
-            const currentPayment = parseFloat(data.payment_bs) || 0;
-            return opening - currentPayment;
-        }
-    };
-
-    const restanteValue = getRestante();
-
-    const handleClose = () => {
-        clearErrors();
-        onClose();
+    const removePayment = async (payment) => {
+        const confirmed = await confirmAction({
+            title: 'Eliminar pago',
+            message: `Se eliminará el pago de Bs ${fmtBs(payment.amount_bs)}.`,
+            detail: 'El pendiente de la deuda aumentará en el mismo monto.',
+            confirmLabel: 'Eliminar pago',
+            tone: 'danger',
+        });
+        if (confirmed) router.delete(route('debt-payments.destroy', payment.id), { preserveScroll: true });
     };
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md">
-            <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {debt ? 'Administrar Deuda' : 'Nueva Cuenta de Deuda'}
-                </h2>
+        <Modal show={show} onClose={close} maxWidth="md">
+            <form onSubmit={submit} className="max-h-[88dvh] overflow-y-auto bg-white p-5 dark:bg-gray-900">
 
-                <div className="space-y-4">
-                    <div>
-                        <InputLabel htmlFor="label" value="Nombre de la Deuda" className="dark:text-gray-300" />
-                        <TextInput
-                            id="label"
-                            type="text"
-                            name="label"
-                            value={data.label}
-                            className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                            onChange={(e) => setData('label', e.target.value)}
-                            required
-                            autoFocus
-                            disabled={!!debt && debt.label.includes('Compras a crédito')}
-                        />
-                        <InputError message={errors.label} className="mt-2" />
-                    </div>
-
-                    <div>
-                        <InputLabel htmlFor="opening_bs" value="Monto Inicial (Bs) [Opcional]" className="dark:text-gray-300" />
-                        <FormattedNumberInput
-                            id="opening_bs"
-                            name="opening_bs"
-                            value={data.opening_bs}
-                            className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                            onChange={(e) => setData('opening_bs', e.target.value)}
-                            disabled={!!debt && !debt.label.includes('Compras a crédito')}
-                        />
-                        <InputError message={errors.opening_bs} className="mt-2" />
-                        {!debt && (
-                            <p className="mt-1 text-[10px] text-gray-400 font-medium">
-                                Si esta deuda solo se nutrirá de compras a crédito de este mes, puedes dejar este campo vacío.
-                            </p>
-                        )}
-                    </div>
-
-                    {debt ? (
-                        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-xl p-4 border border-gray-100 dark:border-gray-800">
-                            <div className="flex items-center justify-between mb-3">
-                                <InputLabel value={isAdditive ? "Registrar nuevo pago" : "Pago inicial"} className="dark:text-gray-300 font-bold" />
-                                <button
-                                    type="button"
-                                    onClick={() => setIsAdditive(!isAdditive)}
-                                    className={cn(
-                                        "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#FF8A3D] focus:ring-offset-2",
-                                        isAdditive ? "bg-[#FF8A3D] dark:bg-[#9B7BFF]" : "bg-gray-200 dark:bg-gray-700"
-                                    )}
-                                >
-                                    <span
-                                        className={cn(
-                                            "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-                                            isAdditive ? "translate-x-5" : "translate-x-0"
-                                        )}
-                                    />
-                                </button>
-                            </div>
-
-                            {isAdditive ? (
-                                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                    <FormattedNumberInput
-                                        id="additive_amount"
-                                        placeholder="Monto a pagar"
-                                        value={data.additive_amount}
-                                        className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                        onChange={(e) => setData('additive_amount', e.target.value)}
-                                        required
-                                    />
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/50 text-gray-500 text-sm flex items-center">
-                                            Disponible (Caja)
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowDatePicker(true)}
-                                            className="px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 flex items-center gap-1"
-                                            title="Cambiar fecha del pago"
-                                        >
-                                            <CalendarIcon size={16} />
-                                            <span className="text-[10px] font-bold uppercase tracking-wider">{formatTimestamp(data.additive_timestamp)}</span>
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                    <FormattedNumberInput
-                                        id="payment_bs"
-                                        name="payment_bs"
-                                        value={data.payment_bs}
-                                        className="block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                        onChange={(e) => setData('payment_bs', e.target.value)}
-                                        required
-                                    />
-                                </div>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="hidden">
-                            <InputLabel htmlFor="payment_bs" value="Pago Realizado (Bs)" className="dark:text-gray-300" />
-                            <FormattedNumberInput
-                                id="payment_bs"
-                                name="payment_bs"
-                                value={data.payment_bs}
-                                className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                onChange={(e) => setData('payment_bs', e.target.value)}
-                            />
-                            <InputError message={errors.payment_bs} className="mt-2" />
-                        </div>
-                    )}
-
-                    <div>
-                        <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
-                            Restante: Bs {restanteValue > 0 ? restanteValue.toLocaleString('es-ES') : '0.00'}
-                        </p>
-                    </div>
-
-                    {debt?.payments?.length > 0 && (
-                        <div className="pt-2">
-                            <button
-                                type="button"
-                                onClick={() => setShowHistory(!showHistory)}
-                                className="flex items-center gap-1 text-xs font-bold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors uppercase tracking-wider"
-                            >
-                                Historial de pagos {showHistory ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-
-                            {showHistory && (
-                                <div className="mt-3 space-y-2 max-h-40 overflow-y-auto">
-                                    {debt.payments.map((p) => (
-                                        <div key={p.id} className="flex justify-between items-center bg-gray-50 dark:bg-gray-800 p-2 rounded-lg">
-                                            <div>
-                                                <p className="text-sm font-bold dark:text-gray-200">Bs {parseFloat(p.amount_bs).toLocaleString('es-ES')}</p>
-                                                <div className="flex gap-2 items-center">
-                                                    <span className="text-[10px] text-gray-400 uppercase">{p.method}</span>
-                                                    <span className="text-[10px] text-gray-400">{new Date(p.timestamp).toLocaleDateString('es-ES')}</span>
-                                                </div>
-                                            </div>
-                                            <button type="button" onClick={() => handleDeletePayment(p.id)} className="p-1 text-red-400 hover:text-red-600 transition-colors">
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    )}
+                <div className="flex items-center gap-3">
+                    {debt && <button type="button" onClick={removeDebt} aria-label={`Eliminar deuda ${debt.label}`} className="touch-feedback flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"><Trash2 size={18} /></button>}
+                    <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold uppercase tracking-tight text-gray-900 dark:text-gray-100">{debt ? 'Administrar deuda' : 'Nueva deuda'}</h2><p className="truncate text-xs text-gray-400">{debt ? `${debt.label} · Bs ${fmtBs(summary.remainingBs)}` : 'Registra el saldo inicial y su seguimiento.'}</p></div>
                 </div>
 
-                <div className="mt-8 flex flex-col-reverse sm:flex-row sm:justify-between gap-4">
-                    {debt ? (
-                        <button
-                            type="button"
-                            onClick={handleDeleteDebt}
-                            className="text-red-500 hover:text-red-700 text-sm font-bold transition-colors py-2 sm:py-0 w-full sm:w-auto text-center"
-                        >
-                            Eliminar Deuda
-                        </button>
-                    ) : <div className="hidden sm:block"></div>}
+                {debt && <div role="tablist" aria-label="Secciones de deuda" className="mt-5 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">{tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={mode === tab.id} onClick={() => { setMode(tab.id); setIsAdditive(tab.id === 'payment'); }} className={`touch-feedback min-h-11 rounded-lg px-1 text-[10px] font-black uppercase tracking-wide ${mode === tab.id ? 'bg-white text-[#FF8A3D] shadow-sm dark:text-[#9B7BFF]' : 'text-gray-500 dark:text-gray-400'}`}>{tab.label}</button>)}</div>}
 
-                    <div className="flex flex-col-reverse sm:flex-row gap-3">
-                        <SecondaryButton onClick={handleClose} className="w-full sm:w-auto justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
-                            Cancelar
-                        </SecondaryButton>
-                        <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                            {debt ? 'Actualizar Pago' : 'Crear Deuda'}
-                        </PrimaryButton>
-                    </div>
+                <div className="mt-5 space-y-4">
+                    {(mode === 'details' || !debt) && <>
+                        <div><InputLabel htmlFor="label" value="Nombre de la deuda" className="dark:text-gray-300" /><TextInput id="label" value={data.label} onChange={(e) => setData('label', e.target.value)} required disabled={!!debt && debt.label.includes('Compras a crédito')} className="mt-1 block w-full dark:border-gray-700 dark:bg-gray-800 dark:text-white" /><InputError message={errors.label} className="mt-2" /></div>
+                        <div><InputLabel htmlFor="opening_bs" value="Saldo inicial (Bs)" className="dark:text-gray-300" /><FormattedNumberInput id="opening_bs" value={data.opening_bs} onChange={(e) => setData('opening_bs', e.target.value)} disabled={!!debt} className="mt-1 block w-full dark:border-gray-700 dark:bg-gray-800 dark:text-white" /><InputError message={errors.opening_bs} className="mt-2" /></div>
+                        {!debt && <div><InputLabel htmlFor="payment_bs" value="Pago inicial (Bs) · opcional" className="dark:text-gray-300" /><FormattedNumberInput id="payment_bs" value={data.payment_bs} onChange={(e) => setData('payment_bs', e.target.value)} className="mt-1 block w-full dark:border-gray-700 dark:bg-gray-800 dark:text-white" /><InputError message={errors.payment_bs} className="mt-2" /></div>}
+                    </>}
+
+                    {debt && <div className="rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/60"><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Estado actual</p><dl className="mt-3 space-y-2 text-xs"><div className="flex justify-between gap-3"><dt className="text-gray-500">Saldo original</dt><dd className="font-bold tabular">Bs {fmtBs(summary.openingBs)}</dd></div><div className="flex justify-between gap-3"><dt className="text-gray-500">Nuevos cargos</dt><dd className="font-bold tabular text-red-500">Bs {fmtBs(summary.currentChargesBs)}</dd></div><div className="flex justify-between gap-3 border-t border-gray-200 pt-2 dark:border-gray-700"><dt className="font-bold">Pendiente</dt><dd className="text-base font-black tabular">Bs {fmtBs(summary.remainingBs)}<span className="block text-[10px] font-bold text-gray-400">≈ $ {fmtUsd(summary.remainingUsd)}</span></dd></div></dl></div>}
+
+                    {mode === 'payment' && debt && <div className="space-y-4 rounded-2xl border border-gray-100 p-4 dark:border-gray-800"><div><InputLabel htmlFor="additive_amount" value="Monto del pago (Bs)" className="dark:text-gray-300" /><FormattedNumberInput id="additive_amount" value={data.additive_amount} onChange={(e) => setData('additive_amount', e.target.value)} required className="mt-1 block w-full dark:border-gray-700 dark:bg-gray-800 dark:text-white" /><p className="mt-1 text-[10px] font-bold tabular text-gray-400">≈ $ {fmtUsd(amountUsd)} @ {fmtRate(rate)} Bs/USD</p><InputError message={errors.additive_amount} className="mt-2" /></div>
+                        <div><InputLabel htmlFor="additive_method" value="Método" className="dark:text-gray-300" /><TextInput id="additive_method" value={data.additive_method} onChange={(e) => setData('additive_method', e.target.value)} className="mt-1 block w-full dark:border-gray-700 dark:bg-gray-800 dark:text-white" /></div>
+                        <div><InputLabel value="Fecha del pago" className="dark:text-gray-300" /><div className="mt-1 grid grid-cols-2 gap-2"><button type="button" onClick={() => setShowDatePicker(true)} className="touch-feedback min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold dark:border-gray-700 dark:bg-gray-800">{paymentDate(data.additive_timestamp)}</button><button type="button" onClick={() => setData('additive_timestamp', Date.now())} className="touch-feedback min-h-11 rounded-xl border border-gray-200 px-3 text-sm font-bold dark:border-gray-700 dark:bg-gray-800">Hoy</button></div></div>
+                        <p className="text-xs font-bold text-gray-500">Después del pago: <span className="tabular">Bs {fmtBs(remainingAfterPayment)}</span></p>
+                    </div>}
+
+
+                    {mode === 'history' && debt && <div><p className="mb-3 text-[10px] font-black uppercase tracking-widest text-gray-400">Historial de pagos</p><div className="space-y-2">{summary.payments.length ? summary.payments.map((payment) => <div key={payment.id} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 p-3 dark:bg-gray-800"><div className="min-w-0"><p className="truncate text-sm font-bold dark:text-gray-100">{payment.method}</p><p className="text-[10px] text-gray-400">{paymentDate(payment.timestamp)}</p></div><div className="flex shrink-0 items-center gap-2"><span className="whitespace-nowrap text-sm font-black tabular text-emerald-600 dark:text-emerald-400">Bs {fmtBs(payment.amount_bs)}</span><button type="button" onClick={() => removePayment(payment)} aria-label={`Eliminar pago de Bs ${fmtBs(payment.amount_bs)}`} className="touch-feedback flex h-11 w-11 items-center justify-center rounded-xl text-gray-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"><Trash2 size={16} /></button></div></div>) : <p className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-400 dark:border-gray-700">Sin pagos registrados</p>}</div></div>}
+                </div>
+
+                <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <SecondaryButton type="button" onClick={close} className="w-full justify-center dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">Cancelar</SecondaryButton>
+                    {mode !== 'history' && <PrimaryButton type="submit" disabled={processing} className="w-full justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90">{processing ? 'Guardando…' : debt ? (mode === 'payment' ? 'Registrar pago' : 'Guardar cambios') : 'Crear deuda'}</PrimaryButton>}
                 </div>
             </form>
 
-            <BudgetCalendar
-                show={showDatePicker}
-                onClose={() => setShowDatePicker(false)}
-                mode="pickDay"
-                title="Fecha del pago"
-                initialMonthId={monthId}
-                initialDayIso={(() => {
-                    const d = new Date(Number(data.additive_timestamp));
-                    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-                })()}
-                onSelect={(calMonthId, dayIso) => {
-                    if (!dayIso) return;
-                    const previous = new Date(Number(data.additive_timestamp));
-                    const picked = new Date(`${dayIso}T00:00:00`);
-                    picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
-                    setData('additive_timestamp', picked.getTime());
-                }}
-            />
+            <BudgetCalendar show={showDatePicker} onClose={() => setShowDatePicker(false)} mode="pickDay" title="Fecha del pago" initialMonthId={monthId} initialDayIso={(() => { const d = new Date(Number(data.additive_timestamp)); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; })()} onSelect={(calMonthId, dayIso) => { if (!dayIso) return; const previous = new Date(Number(data.additive_timestamp)); const picked = new Date(`${dayIso}T00:00:00`); picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0); setData('additive_timestamp', picked.getTime()); setShowDatePicker(false); }} />
         </Modal>
     );
 }

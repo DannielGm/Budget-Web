@@ -36,8 +36,7 @@ class NativeServiceProvider extends ServiceProvider
         return [
             \Native\Mobile\Providers\ShareServiceProvider::class,
             \Smronju\NativephpDocumentPicker\DocumentPickerServiceProvider::class,
-        
-        
+            \BudgetWeb\NativePHPRemoteDesktop\RemoteDesktopServiceProvider::class,
         ];
     }
 }

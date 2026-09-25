@@ -1,0 +1,24 @@
+{
+    "name": "budget-web/nativephp-remote-desktop",
+    "description": "Temporary token-protected LAN access to the embedded Laravel app on Android.",
+    "type": "nativephp-plugin",
+    "license": "proprietary",
+    "require": {
+        "php": "^8.3"
+    },
+    "autoload": {
+        "psr-4": {
+            "BudgetWeb\\NativePHPRemoteDesktop\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "BudgetWeb\\NativePHPRemoteDesktop\\RemoteDesktopServiceProvider"
+            ]
+        },
+        "nativephp": {
+            "manifest": "nativephp.json"
+        }
+    }
+}

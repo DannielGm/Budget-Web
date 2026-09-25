@@ -8,13 +8,11 @@ const typeMeta = (c) => c?.is_presupuesto
         ? { label: 'Contado', badge: 'bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300', impact: 'Reduce el saldo disponible' }
         : { label: 'Crédito', badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300', impact: 'Suma a compras a crédito' };
 
-export default forwardRef(function ExpenseCard({ category, expenses, monthRate, isBudgetOk, dateFilter, onSelectCategory, onAdd, onEdit, onDelete }, ref) {
+export default forwardRef(function ExpenseCard({ category, expenses, selectedRate, isBudgetOk, dateFilter, onSelectCategory, onAdd, onEdit, onDelete }, ref) {
     const meta = typeMeta(category);
     const totalBs = expenses.reduce((sum, e) => sum + (Number(e.amount_bs) || 0), 0);
-    const totalUsd = expenses.reduce((sum, e) => {
-        const rate = Number(e.rate) || Number(monthRate) || 0;
-        return sum + (rate > 0 ? (Number(e.amount_bs) || 0) / rate : 0);
-    }, 0);
+    const selectedRateValue = Number(selectedRate) || 0;
+    const totalUsd = selectedRateValue > 0 ? totalBs / selectedRateValue : 0;
 
     return (
         <section ref={ref} className="rounded-2xl border border-gray-100 bg-white p-4 dark:border-gray-800 dark:bg-gray-900" aria-labelledby="expense-category-title">
@@ -29,12 +27,12 @@ export default forwardRef(function ExpenseCard({ category, expenses, monthRate, 
             <div className="mt-4 rounded-xl bg-gray-50 p-3 dark:bg-gray-800/60">
                 <p className="text-[9px] font-black uppercase tracking-widest text-gray-400">Total de la categoría</p>
                 <p className={`mt-1 truncate text-xl font-black font-serif tabular ${category?.is_presupuesto ? (isBudgetOk ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500') : 'text-gray-900 dark:text-white'}`}>Bs {fmtBs(totalBs)}</p>
-                <p className="mt-0.5 text-xs font-bold tabular text-gray-400">≈ $ {fmtUsd(totalUsd)} <span className="font-medium">· {expenses.length} {expenses.length === 1 ? 'movimiento' : 'movimientos'}</span></p>
+                <p className="mt-0.5 text-xs font-bold tabular text-gray-400">≈ $ {fmtUsd(totalUsd)} <span className="font-medium">· @ {fmtRate(selectedRateValue)} Bs/USD · {expenses.length} {expenses.length === 1 ? 'movimiento' : 'movimientos'}</span></p>
             </div>
 
             <div className="mt-4 space-y-2" role="list" aria-label={`Gastos de ${category?.name || 'categoría'}`}>
                 {expenses.length === 0 ? <div className="flex flex-col items-center py-7 text-center"><Receipt size={28} className="text-gray-300 dark:text-gray-600" /><p className="mt-2 text-sm font-bold text-gray-500 dark:text-gray-300">Sin gastos {dateFilter ? 'en esta fecha' : 'todavía'}</p><p className="mt-1 text-xs text-gray-400">Añade el primer movimiento de esta categoría.</p></div> : expenses.map((expense) => {
-                    const rate = Number(expense.rate) || Number(monthRate) || 0;
+                    const rate = Number(expense.rate) || selectedRateValue || 0;
                     const usd = rate > 0 ? (Number(expense.amount_bs) || 0) / rate : 0;
                     const date = new Date(expense.timestamp);
                     return <div key={expense.id} role="listitem" className="flex items-center gap-2 rounded-xl border border-transparent transition-colors hover:border-gray-100 hover:bg-gray-50/70 dark:hover:border-gray-800 dark:hover:bg-gray-800/50">

@@ -9,6 +9,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { useConfirm } from '@/Components/ConfirmationProvider';
 import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -20,6 +21,7 @@ function formatTimestamp(ms) {
 
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
     const { budget } = usePage().props;
+    const confirmAction = useConfirm();
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showRateEditor, setShowRateEditor] = useState(false);
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
@@ -118,8 +120,16 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
         onClose();
     };
 
-    const handleDelete = () => {
-        if (!expense || !window.confirm(`¿Eliminar “${expense.label}”? Esta acción no se puede deshacer.`)) return;
+    const handleDelete = async () => {
+        if (!expense) return;
+        const confirmed = await confirmAction({
+            title: 'Eliminar gasto',
+            message: `Se eliminará “${expense.label}” por Bs ${fmtBs(expense.amount_bs)}.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+        });
+        if (!confirmed) return;
         router.delete(route('expenses.destroy', expense.id), {
             onSuccess: () => {
                 reset();

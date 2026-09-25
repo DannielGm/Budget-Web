@@ -1,0 +1,42 @@
+{
+    "name": "budget-web/nativephp-remote-desktop",
+    "version": "0.1.0",
+    "description": "Temporary token-protected LAN access to the embedded Laravel app on Android.",
+    "namespace": "RemoteDesktop",
+    "keywords": ["nativephp", "mobile", "lan", "remote"],
+    "category": "developer",
+    "license": "proprietary",
+    "pricing": { "type": "free" },
+    "author": { "name": "BKeeper" },
+    "platforms": ["android"],
+    "screenshots": [],
+    "bridge_functions": [
+        {
+            "name": "RemoteDesktop.Start",
+            "android": "com.bkeeper.remotedesktop.RemoteDesktopFunctions.Start",
+            "description": "Start temporary LAN access to the embedded Laravel app"
+        },
+        {
+            "name": "RemoteDesktop.Stop",
+            "android": "com.bkeeper.remotedesktop.RemoteDesktopFunctions.Stop",
+            "description": "Stop LAN access and invalidate remote sessions"
+        },
+        {
+            "name": "RemoteDesktop.Status",
+            "android": "com.bkeeper.remotedesktop.RemoteDesktopFunctions.Status",
+            "description": "Return LAN address, expiry, and active state"
+        }
+    ],
+    "android": {
+        "min_version": 26,
+        "permissions": ["android.permission.ACCESS_WIFI_STATE", "android.permission.ACCESS_NETWORK_STATE"],
+        "repositories": [],
+        "dependencies": { "implementation": [] },
+        "activities": [], "services": [], "receivers": [], "providers": []
+    },
+    "ios": { "min_version": "18.2", "info_plist": {}, "dependencies": { "swift_packages": [], "pods": [] } },
+    "assets": { "android": [], "ios": [] },
+    "secrets": [],
+    "events": [],
+    "service_provider": "BudgetWeb\\NativePHPRemoteDesktop\\RemoteDesktopServiceProvider"
+}

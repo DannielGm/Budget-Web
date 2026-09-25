@@ -20,17 +20,22 @@ use Native\Mobile\Platform;
 class NativeCapabilities
 {
     /**
-     * @return array{isNative: bool, canSave: bool, canPick: bool, canShare: bool}
+     * @return array{isNative: bool, canSave: bool, canPick: bool, canShare: bool, canRemoteDesktop: bool, platform: ?string}
      */
     public static function detect(): array
     {
-        $isNative = Platform::current() !== null;
+        $platform = Platform::current();
+        $isNative = $platform !== null;
 
         return [
             'isNative' => $isNative,
+            'platform' => $platform,
             'canSave' => $isNative && self::bridgeHas('DocumentPicker.Save'),
             'canPick' => $isNative && self::bridgeHas('DocumentPicker.Pick'),
             'canShare' => $isNative && self::bridgeHas('Share.File'),
+            'canRemoteDesktop' => $isNative
+                && $platform === 'android'
+                && self::bridgeHas('RemoteDesktop.Start'),
         ];
     }
 

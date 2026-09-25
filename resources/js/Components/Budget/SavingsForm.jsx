@@ -8,8 +8,10 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
+import { useConfirm } from '@/Components/ConfirmationProvider';
 
 export default function SavingsForm({ show, onClose, transaction = null, monthId, defaultRate }) {
+    const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         month_id: monthId,
         type: transaction?.type || 'deposit',
@@ -62,16 +64,19 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
         onClose();
     };
 
-        const handleDelete = () => {
-        if (window.confirm('¿Estás seguro de eliminar este movimiento de ahorro?')) {
-            router.delete(route('savings.destroy', transaction.id), {
-                preserveScroll: true,
-                onSuccess: () => {
-                    reset();
-                    onClose();
-                },
-            });
-        }
+    const handleDelete = async () => {
+        const confirmed = await confirmAction({
+            title: 'Eliminar movimiento de ahorro',
+            message: 'Se eliminará el movimiento de ahorro seleccionado.',
+            detail: 'El saldo de la cuenta de ahorro se recalculará automáticamente.',
+            confirmLabel: 'Eliminar movimiento',
+            tone: 'danger',
+        });
+        if (!confirmed) return;
+        router.delete(route('savings.destroy', transaction.id), {
+            preserveScroll: true,
+            onSuccess: () => { reset(); onClose(); },
+        });
     };
 
 

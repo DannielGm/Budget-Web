@@ -1,10 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import DashboardHeader from '@/Components/DashboardHeader';
 import { Head, usePage, router } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import MonthSummaryStrip from '@/Components/Budget/MonthSummaryStrip';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
+import DebtCard from '@/Components/Budget/DebtCard';
+
 import ExpenseCard from '@/Components/Budget/ExpenseCard';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
@@ -16,7 +19,9 @@ import RateHistoryDashboard from '@/Components/Budget/RateHistoryDashboard';
 import SavingsForm from '@/Components/Budget/SavingsForm';
 import TransferModal from '@/Components/Budget/TransferModal';
 import Modal from '@/Components/Modal';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
+import RemoteDesktopPanel from '@/Components/RemoteDesktopPanel';
+import { useConfirm } from '@/Components/ConfirmationProvider';
+import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, Settings as SettingsIcon, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
@@ -83,8 +88,9 @@ function sameDay(timestampMs, dateIso) {
 
 export default function Dashboard() {
     const {
-        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger,
+        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger, native,
     } = usePage().props;
+    const confirmAction = useConfirm();
 
     const [isDark, setIsDark] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -113,28 +119,15 @@ export default function Dashboard() {
     const [selectedPool, setSelectedPool] = useState(null);
     const [movementPool, setMovementPool] = useState(null);
     const [showSettingsModal, setShowSettingsModal] = useState(false);
+    const [showRemoteDesktop, setShowRemoteDesktop] = useState(false);
     // View state for swipeable dashboard (0 = Main, 1 = Rates, 2 = Savings)
     const [currentViewIndex, setCurrentViewIndex] = useState(0);
-    const [isViewSelectorOpen, setIsViewSelectorOpen] = useState(false);
-    const viewSelectorRef = useRef(null);
 
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (viewSelectorRef.current && !viewSelectorRef.current.contains(event.target)) {
-                setIsViewSelectorOpen(false);
-            }
-        };
-
-        if (isViewSelectorOpen) {
-            document.addEventListener('mousedown', handleClickOutside);
-            document.addEventListener('touchstart', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-            document.removeEventListener('touchstart', handleClickOutside);
-        };
-    }, [isViewSelectorOpen]);
+    const changeView = (index) => {
+        if (index === currentViewIndex) return;
+        setDirection(index > currentViewIndex ? 1 : -1);
+        setCurrentViewIndex(index);
+    };
 
 
 
@@ -281,10 +274,15 @@ export default function Dashboard() {
         setShowExpenseModal(true);
     };
 
-    const handleDeleteExpense = (expense) => {
-        if (confirm('¿Estás seguro de eliminar este gasto?')) {
-            router.delete(route('expenses.destroy', expense.id));
-        }
+    const handleDeleteExpense = async (expense) => {
+        const confirmed = await confirmAction({
+            title: 'Eliminar gasto',
+            message: `Se eliminará “${expense.label}” por Bs ${fmtBs(expense.amount_bs)}.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Eliminar',
+            tone: 'danger',
+        });
+        if (confirmed) router.delete(route('expenses.destroy', expense.id));
     };
 
     const handleEditDebt = (debt) => {
@@ -292,8 +290,8 @@ export default function Dashboard() {
         setShowDebtModal(true);
     };
 
+    const effectiveRate = dateFilter ? rate?.rate : budget.income_rate;
     const creditPurchasesBs = parseFloat(budget.credit_purchases_bs || 0);
-
     const totalDebtBs = parseFloat(budget.debt_bs || 0);
 
     const totalPresupuestoBs = (budget.categories || [])
@@ -304,6 +302,48 @@ export default function Dashboard() {
         }, 0);
 
     const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuestoBs;
+
+    const clearSelectedDay = async () => {
+        if (!dateFilter) return;
+        const confirmed = await confirmAction({
+            title: 'Limpiar datos del día',
+            message: `Se eliminarán los gastos, deudas, pagos, ahorros y transferencias del ${dateFilter}.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Limpiar día',
+            tone: 'danger',
+        });
+        if (confirmed) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter });
+    };
+    const clearCurrentMonth = async () => {
+        const confirmed = await confirmAction({
+            title: 'Limpiar mes actual',
+            message: `Se eliminarán todos los datos de ${budget.month_label}.`,
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Limpiar mes',
+            tone: 'danger',
+        });
+        if (confirmed) router.post(route('settings.clear-month', budget.month_id));
+    };
+    const seedMockData = async () => {
+        const confirmed = await confirmAction({
+            title: 'Llenar datos de prueba',
+            message: 'Se reemplazarán los datos de los últimos cuatro meses.',
+            detail: 'Tus datos actuales de esos meses serán sustituidos.',
+            confirmLabel: 'Llenar datos',
+            tone: 'warning',
+        });
+        if (confirmed) router.post(route('settings.seed-mock'));
+    };
+    const clearAllData = async () => {
+        const confirmed = await confirmAction({
+            title: 'Borrar todos los datos',
+            message: 'Se eliminarán todos los meses, gastos, deudas, pagos, ahorros y transferencias.',
+            detail: 'Esta acción no se puede deshacer.',
+            confirmLabel: 'Borrar todo',
+            tone: 'danger',
+        });
+        if (confirmed) router.post(route('settings.clear'));
+    };
 
     const swipeVariants = {
         enter: (direction) => {
@@ -348,106 +388,17 @@ export default function Dashboard() {
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex justify-between items-center w-full px-3 sm:px-0 gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                        {isNotToday && (
-                            <button
-                                onClick={goToToday}
-                                title="Ir a hoy"
-                                className="touch-feedback p-1.5 shrink-0 text-white hover:bg-white/10 rounded-full"
-                            >
-                                <Home size={18} />
-                            </button>
-                        )}
-                        <button
-                            type="button"
-                            onClick={() => setShowCalendar(true)}
-                            title="Elegir mes o día"
-                            aria-label="Elegir mes o día"
-                            className="touch-feedback flex-1 min-w-0 max-w-full text-left cursor-pointer"
-                        >
-                            <h2 className="block min-w-0 max-w-full truncate whitespace-nowrap text-lg sm:text-2xl font-black font-serif text-white uppercase tracking-tight">
-                                {headerLabel}
-                            </h2>
-                        </button>
-                    </div>
-
-                    <div className="flex items-center gap-0.5 shrink-0">
-                        {/* Collapsible Dashboard View Switcher */}
-                        <div className="relative" ref={viewSelectorRef}>
-                            {(() => {
-                                const views = [
-                                    { icon: BarChart3, index: 0, title: 'Presupuesto' },
-                                    { icon: TrendingUp, index: 1, title: 'Tasas BCV' },
-                                    { icon: Wallet, index: 2, title: 'Ahorros' },
-                                ];
-                                const activeView = views[currentViewIndex] || views[0];
-                                const ActiveIcon = activeView.icon;
-
-                                return (
-                                    <>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsViewSelectorOpen((prev) => !prev)}
-                                            className={cn(
-                                                "touch-feedback p-1.5 rounded-full flex items-center justify-center",
-                                                isViewSelectorOpen
-                                                    ? "bg-white text-[#FF8A3D] dark:text-[#9B7BFF] shadow-sm"
-                                                    : "bg-white/20 text-white hover:bg-white/30"
-                                            )}
-                                            title={`Vista actual: ${activeView.title} (toca para cambiar)`}
-                                            aria-label="Cambiar vista de dashboard"
-                                        >
-                                            <ActiveIcon size={18} />
-                                        </button>
-
-                                        {isViewSelectorOpen && (
-                                            <div className="absolute right-0 top-full mt-1.5 p-1 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-800 flex flex-col gap-1 z-50 animate-in fade-in zoom-in-95 duration-100">
-                                                {views.map(({ icon: Icon, index, title }) => {
-                                                    const isCurrent = currentViewIndex === index;
-                                                    return (
-                                                        <button
-                                                            key={index}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (index !== currentViewIndex) {
-                                                                    setDirection(index > currentViewIndex ? 1 : -1);
-                                                                    setCurrentViewIndex(index);
-                                                                }
-                                                                setIsViewSelectorOpen(false);
-                                                            }}
-                                                            className={cn(
-                                                                "touch-feedback p-2 rounded-xl flex items-center gap-2 text-xs font-semibold whitespace-nowrap pr-3",
-                                                                isCurrent
-                                                                    ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-sm"
-                                                                    : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                                            )}
-                                                            title={title}
-                                                        >
-                                                            <Icon size={16} className="shrink-0" />
-                                                            <span>{title}</span>
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-                                    </>
-                                );
-                            })()}
-                        </div>
-
-                        <button onClick={toggleTheme} className="touch-feedback p-1.5 text-white hover:bg-white/10 rounded-full" title={isDark ? 'Activar tema claro' : 'Activar tema oscuro'} aria-label={isDark ? 'Activar tema claro' : 'Activar tema oscuro'}>
-                            {isDark ? <Sun size={20} /> : <Moon size={20} />}
-                        </button>
-                        <button
-                            onClick={() => setShowSettingsModal(true)}
-                            className="touch-feedback p-1.5 text-white hover:bg-white/10 rounded-full"
-                            aria-label="Abrir menú de configuración"
-                        >
-                            <SettingsIcon size={20} />
-                        </button>
-                    </div>
-                </div>
+                <DashboardHeader
+                    headerLabel={headerLabel}
+                    isNotToday={isNotToday}
+                    onGoToToday={goToToday}
+                    onOpenCalendar={() => setShowCalendar(true)}
+                    currentViewIndex={currentViewIndex}
+                    onChangeView={changeView}
+                    isDark={isDark}
+                    onToggleTheme={toggleTheme}
+                    onOpenSettings={() => setShowSettingsModal(true)}
+                />
             }
         >
             <Head title="Dashboard" />
@@ -540,73 +491,21 @@ export default function Dashboard() {
                 </div>
 
                 {/* Deuda Card */}
-                <div className="bg-[#1A1A1A] rounded-2xl p-4 text-white shadow-lg overflow-hidden relative">
-                    <div className="flex justify-between items-center mb-3">
-                        <div
-                            className="flex items-center gap-2 cursor-pointer group"
-                            onClick={() => setShowDebtSummary(true)}
-                        >
-                            <CreditCard className="text-gray-400 group-hover:text-white transition-colors" size={18} />
-                            <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400 group-hover:text-white transition-colors">Estado de Deuda</h4>
-                        </div>
-                        <button
-                            onClick={() => { setEditingDebt(null); setShowDebtModal(true); }}
-                            className="text-gray-400 hover:text-white transition-colors"
-                        >
-                            <Plus size={20} />
-                        </button>
-                    </div>
-
-                    <div className="mb-4">
-                        <p className="text-2xl font-black font-serif tracking-tight tabular">
-                            Bs {totalDebtBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </p>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider tabular">
-                            $ {budget.income_rate > 0 ? (totalDebtBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                        </p>
-                    </div>
-
-                    <div className="space-y-3">
-                        {creditPurchasesBs > 0 && (
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs text-gray-300 font-medium">Compras a crédito</span>
-                                <div className="text-right">
-                                    <span className="text-sm font-bold block">Bs {creditPurchasesBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    <span className="text-[10px] text-gray-400 font-bold">$ {budget.income_rate > 0 ? (creditPurchasesBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</span>
-                                </div>
-                            </div>
-                        )}
-                        {budget.debts.map(debt => {
-                            const debtOpeningBs = parseFloat(debt.opening_bs || 0);
-                            const debtChargesBs = parseFloat(debt.credit_expenses_bs || 0);
-                            const debtPaidBs = parseFloat(debt.payment_bs || 0);
-                            const debtTotalBs = debtOpeningBs + debtChargesBs;
-                            const debtRemainingBs = debtTotalBs - debtPaidBs;
-                            const paidPercentage = debtTotalBs > 0 ? (debtPaidBs / debtTotalBs) * 100 : 0;
-                            return (
-                                <div key={debt.id} className="flex justify-between items-start gap-3 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" onClick={() => handleEditDebt(debt)}>
-                                    <span className="text-xs text-gray-300 font-medium min-w-0 truncate">{debt.label}</span>
-                                    <div className="text-right shrink-0">
-                                        <p className="text-sm font-bold tabular">Bs {fmtBs(debtRemainingBs)}</p>
-                                        <p className="text-[10px] text-gray-400 font-bold tabular">$ {fmtUsd(budget.income_rate > 0 ? debtRemainingBs / parseFloat(budget.income_rate) : 0)}</p>
-                                        {debtPaidBs > 0 && (
-                                            <p className="text-[10px] text-green-400 font-bold tabular">{fmtPct(paidPercentage, 0)}% pagado - Bs {fmtBs(debtPaidBs)}</p>
-                                        )}
-                                        {debtChargesBs > 0 && (
-                                            <p className="text-[10px] text-red-400 font-bold tabular">Nuevos cargos: Bs {fmtBs(debtChargesBs)}</p>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
+                <DebtCard
+                    debts={budget.debts}
+                    totalDebtBs={totalDebtBs}
+                    creditPurchasesBs={creditPurchasesBs}
+                    rate={effectiveRate}
+                    onOpenSummary={() => setShowDebtSummary(true)}
+                    onAdd={() => { setEditingDebt(null); setShowDebtModal(true); }}
+                    onEdit={handleEditDebt}
+                />
 
                 <ExpenseCard
                     ref={expensesContainerRef}
                     category={selectedCategory}
                     expenses={selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)}
-                    monthRate={budget.income_rate}
+                    selectedRate={effectiveRate}
                     isBudgetOk={isBudgetOk}
                     dateFilter={dateFilter}
                     onSelectCategory={() => setShowCategoryAccordion(true)}
@@ -724,6 +623,7 @@ export default function Dashboard() {
                 onClose={() => setShowDebtModal(false)}
                 debt={editingDebt}
                 monthId={budget.month_id}
+                rate={effectiveRate}
             />
 
             <CategoryForm
@@ -767,7 +667,8 @@ export default function Dashboard() {
                         onClose={() => setShowDebtSummary(false)}
                         debts={budget.debts}
                         creditPurchasesBs={creditPurchasesBs}
-                        currentRate={budget.income_rate}
+                        currentRate={effectiveRate}
+                        totalDebtBs={totalDebtBs}
                     />
                 )}
                                 {selectedPool && (
@@ -810,10 +711,11 @@ export default function Dashboard() {
                     </div>
 
                     <div className="space-y-1">
-                        <button disabled={!dateFilter} onClick={() => { setShowSettingsModal(false); if (confirm('¿Limpiar los gastos de ESTE DÍA?')) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter }); }} className="menu-button" disabled:opacity-40>Limpiar datos del día</button>
-                        <button onClick={() => { setShowSettingsModal(false); if (confirm(`¿Limpiar todo el mes de ${budget.month_label}?`)) router.post(route('settings.clear-month', budget.month_id)); }} className="menu-button">Limpiar mes actual</button>
-                        <button onClick={() => { setShowSettingsModal(false); if (confirm('¿Llenar con datos de prueba? Esto reemplazará los últimos 4 meses.')) router.post(route('settings.seed-mock')); }} className="menu-button">Llenar datos de prueba</button>
-                        <button onClick={() => { setShowSettingsModal(false); if (confirm('¡PELIGRO! ¿Borrar TODOS los meses y datos?')) router.post(route('settings.clear')); }} className="menu-button text-red-600 dark:text-red-400">Limpiar todos los datos</button>
+                        {native?.canRemoteDesktop && <button type="button" onClick={() => { setShowSettingsModal(false); setShowRemoteDesktop(true); }} className="menu-button">Escritorio remoto</button>}
+                        <button disabled={!dateFilter} onClick={() => { setShowSettingsModal(false); clearSelectedDay(); }} className="menu-button" disabled:opacity-40>Limpiar datos del día</button>
+                        <button onClick={() => { setShowSettingsModal(false); clearCurrentMonth(); }} className="menu-button">Limpiar mes actual</button>
+                        <button onClick={() => { setShowSettingsModal(false); seedMockData(); }} className="menu-button">Llenar datos de prueba</button>
+                        <button onClick={() => { setShowSettingsModal(false); clearAllData(); }} className="menu-button text-red-600 dark:text-red-400">Limpiar todos los datos</button>
                         <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
                         <a href={route('settings')} className="menu-button">Configuración</a>
                         {auth?.user ? (
@@ -832,6 +734,8 @@ export default function Dashboard() {
                     </div>
                 </div>
             </Modal>
+
+            <RemoteDesktopPanel show={showRemoteDesktop} onClose={() => setShowRemoteDesktop(false)} />
 
             <TransferModal
                 show={showTransferModal || editingTransfer !== null || movementPool !== null}

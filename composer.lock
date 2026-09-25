@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "4887b4c20f5d47c31da88601e6f35930",
+    "content-hash": "405d5a36c429d747cb055fb407b2addb",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -119,6 +119,41 @@
                 }
             ],
             "time": "2026-08-08T23:03:16+00:00"
+        },
+        {
+            "name": "budget-web/nativephp-remote-desktop",
+            "version": "dev-main",
+            "dist": {
+                "type": "path",
+                "url": "packages/nativephp-remote-desktop",
+                "reference": "3928d565032754f478a766356c930f9e2bb1449c"
+            },
+            "require": {
+                "php": "^8.3"
+            },
+            "type": "nativephp-plugin",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "BudgetWeb\\NativePHPRemoteDesktop\\RemoteDesktopServiceProvider"
+                    ]
+                },
+                "nativephp": {
+                    "manifest": "nativephp.json"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "BudgetWeb\\NativePHPRemoteDesktop\\": "src/"
+                }
+            },
+            "license": [
+                "proprietary"
+            ],
+            "description": "Temporary token-protected LAN access to the embedded Laravel app on Android.",
+            "transport-options": {
+                "relative": true
+            }
         },
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -9901,7 +9936,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "budget-web/nativephp-remote-desktop": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

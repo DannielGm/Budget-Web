@@ -8,6 +8,7 @@ use App\Http\Controllers\SavingTransactionController;
 use App\Http\Controllers\TransferController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\RemoteDesktopController;
 use Illuminate\Support\Facades\Route;
 
 // The budget screens are intentionally public: signing in is optional for now.
@@ -60,6 +61,11 @@ Route::post('/import', [ExportController::class, 'import'])->name('import');
 Route::post('/backup/export', [ExportController::class, 'exportNative'])->name('backup.export');
 Route::post('/backup/import/pick', [ExportController::class, 'pickImportFile'])->name('backup.import.pick');
 Route::get('/backup/status', [ExportController::class, 'status'])->name('backup.status');
+
+// Short-lived, code-protected LAN access to the same embedded Laravel app.
+Route::get('/remote-desktop/status', [RemoteDesktopController::class, 'status'])->name('remote-desktop.status');
+Route::post('/remote-desktop/start', [RemoteDesktopController::class, 'start'])->name('remote-desktop.start');
+Route::post('/remote-desktop/stop', [RemoteDesktopController::class, 'stop'])->name('remote-desktop.stop');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
