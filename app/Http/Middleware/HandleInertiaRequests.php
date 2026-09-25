@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\NativeCapabilities;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -34,6 +35,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'native' => fn (): array => NativeCapabilities::detect(),
             'flash' => fn () => [
                 'backup_export' => $request->session()->get('backup_export'),
                 'backup_import' => $request->session()->get('backup_import'),

@@ -7,8 +7,9 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
-import { useForm, usePage } from '@inertiajs/react';
-import { ArrowRightLeft } from 'lucide-react';
+import { router, useForm, usePage } from '@inertiajs/react';
+import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
+import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -20,6 +21,7 @@ function formatTimestamp(ms) {
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
     const { budget } = usePage().props;
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showRateEditor, setShowRateEditor] = useState(false);
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         id: expense?.id || '',
         month_id: monthId,
@@ -36,6 +38,21 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
     const [targetCategory, setTargetCategory] = useState('');
 
     const realCategories = budget.categories.filter(c => !c.is_presupuesto);
+    const amountBs = Number(data.amount_bs) || 0;
+    const appliedRate = Number(data.rate) || 0;
+    const amountUsd = appliedRate > 0 ? amountBs / appliedRate : 0;
+    const availableBalance = Number(budget.available_balance_bs) || 0;
+    const isCash = Boolean(category?.cash_expense) && !isPresupuesto;
+    const impactTitle = isPresupuesto
+        ? 'Solo seguimiento del presupuesto'
+        : isCash
+            ? 'Se descontará del saldo disponible'
+            : 'Se sumará a las compras a crédito';
+    const impactTone = isPresupuesto
+        ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-900/40 dark:bg-indigo-950/20 dark:text-indigo-300'
+        : isCash
+            ? 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300'
+            : 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300';
 
     useEffect(() => {
         if (expense) {
@@ -56,6 +73,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             setData('timestamp', Date.now());
         }
         setMoveToReal(false);
+        setShowRateEditor(false);
         setTargetCategory(realCategories.length > 0 ? realCategories[0].name : '');
     }, [expense, categoryName, monthId, show]);
 
@@ -100,128 +118,112 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
         onClose();
     };
 
+    const handleDelete = () => {
+        if (!expense || !window.confirm(`¿Eliminar “${expense.label}”? Esta acción no se puede deshacer.`)) return;
+        router.delete(route('expenses.destroy', expense.id), {
+            onSuccess: () => {
+                reset();
+                onClose();
+            },
+        });
+    };
+
     return (
         <Modal show={show} onClose={handleClose} maxWidth="md">
-            <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {expense ? 'Editar Gasto' : `Nuevo Gasto en ${categoryName}`}
-                </h2>
+            <form onSubmit={submit} className="max-h-[88vh] overflow-y-auto p-5 bg-white dark:bg-gray-900 transition-colors sm:p-6">
+                <div className="mb-5 flex items-center gap-3">
+                    {expense && (
+                        <button type="button" onClick={handleDelete} title="Eliminar gasto" aria-label="Eliminar gasto" className="touch-feedback shrink-0 rounded-xl p-2.5 text-red-500 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30">
+                            <Trash2 size={18} aria-hidden="true" />
+                        </button>
+                    )}
+                    <div className="min-w-0">
+                        <h2 className="text-xl font-black uppercase tracking-tight text-gray-900 dark:text-white">{expense ? 'Editar gasto' : 'Nuevo gasto'}</h2>
+                        <p className="mt-0.5 truncate text-xs font-bold text-gray-400">{categoryName} · {isPresupuesto ? 'Presupuesto' : isCash ? 'Contado' : 'Crédito'}</p>
+                    </div>
+                </div>
 
-                <div className="space-y-4">
+                <div className="space-y-5">
                     <div>
-                        <InputLabel htmlFor="label" value="Concepto" className="dark:text-gray-300" />
+                        <InputLabel htmlFor="label" value="Concepto" className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400" />
                         <TextInput
-                            id="label"
-                            type="text"
-                            name="label"
-                            value={data.label}
-                            className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                            onChange={(e) => setData('label', e.target.value)}
-                            required
-                            autoFocus
+                            id="label" type="text" name="label" value={data.label}
+                            className="mt-2 block min-h-12 w-full rounded-xl px-4 text-base dark:bg-gray-800 dark:text-white dark:border-gray-700"
+                            onChange={(e) => setData('label', e.target.value)} placeholder="Ej.: Supermercado"
+                            enterKeyHint="next" autoComplete="off" required
                         />
                         <InputError message={errors.label} className="mt-2" />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <InputLabel htmlFor="amount_bs" value="Monto (Bs)" className="dark:text-gray-300" />
+                    <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/50">
+                        <InputLabel htmlFor="amount_bs" value="Monto" className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400" />
+                        <div className="mt-2 flex items-center gap-2">
+                            <span className="font-serif text-xl font-black text-gray-400">Bs</span>
                             <FormattedNumberInput
-                                id="amount_bs"
-                                name="amount_bs"
-                                value={data.amount_bs}
-                                className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                onChange={(e) => setData('amount_bs', e.target.value)}
-                                required
+                                id="amount_bs" name="amount_bs" value={data.amount_bs}
+                                className="min-h-14 w-full border-0 bg-transparent px-0 text-3xl font-black font-serif tabular shadow-none focus:ring-0 dark:text-white"
+                                onChange={(e) => setData('amount_bs', e.target.value)} inputMode="decimal"
+                                aria-describedby="amount-usd-help" required
                             />
-                            <InputError message={errors.amount_bs} className="mt-2" />
                         </div>
+                        <p id="amount-usd-help" className="mt-1 text-sm font-bold tabular text-gray-500 dark:text-gray-300">
+                            ≈ $ {fmtUsd(amountUsd)} <span className="text-xs font-medium text-gray-400">@ {fmtRate(appliedRate)} Bs/USD</span>
+                        </p>
+                        <InputError message={errors.amount_bs} className="mt-2" />
+                    </div>
 
-                        <div>
-                            <InputLabel htmlFor="rate" value="Tasa (BCV)" className="dark:text-gray-300" />
-                            <FormattedNumberInput
-                                id="rate"
-                                name="rate"
-                                value={data.rate}
-                                className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                onChange={(e) => setData('rate', e.target.value)}
-                                required
-                            />
-                            <InputError message={errors.rate} className="mt-2" />
-                        </div>
+                    <div className="rounded-xl border border-gray-100 dark:border-gray-800">
+                        <button type="button" onClick={() => setShowRateEditor((value) => !value)} className="touch-feedback flex min-h-12 w-full items-center justify-between px-4 text-left" aria-expanded={showRateEditor}>
+                            <span><span className="block text-[10px] font-black uppercase tracking-widest text-gray-400">Tasa aplicada</span><span className="mt-0.5 block text-sm font-bold tabular text-gray-700 dark:text-gray-200">{fmtRate(appliedRate)} Bs/USD</span></span>
+                            {showRateEditor ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+                        </button>
+                        {showRateEditor && (
+                            <div className="border-t border-gray-100 p-4 dark:border-gray-800">
+                                <InputLabel htmlFor="rate" value="Cambiar tasa BCV" className="text-xs font-bold text-gray-500 dark:text-gray-400" />
+                                <FormattedNumberInput id="rate" name="rate" value={data.rate} className="mt-2 block min-h-11 w-full dark:bg-gray-800 dark:text-white dark:border-gray-700" onChange={(e) => setData('rate', e.target.value)} inputMode="decimal" required />
+                                <InputError message={errors.rate} className="mt-2" />
+                            </div>
+                        )}
                     </div>
 
                     {expense && isPresupuesto && (
-                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 mt-2">
-                            <div className="flex items-center gap-2 mb-3">
-                                <input
-                                    type="checkbox"
-                                    id="moveToReal"
-                                    checked={moveToReal}
-                                    onChange={(e) => setMoveToReal(e.target.checked)}
-                                    className="rounded dark:bg-gray-800 border-gray-300 dark:border-gray-700 text-[#FF8A3D] focus:ring-[#FF8A3D]"
-                                />
-                                <InputLabel htmlFor="moveToReal" value="Convertir en gasto real" className="dark:text-gray-300 cursor-pointer flex items-center gap-1 font-bold">
-                                    <ArrowRightLeft size={14} className="text-[#FF8A3D] dark:text-[#9B7BFF]" /> Convertir en gasto real
-                                </InputLabel>
-                            </div>
+                        <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4 dark:border-indigo-900/40 dark:bg-indigo-950/20">
+                            <label htmlFor="moveToReal" className="flex cursor-pointer items-center gap-3">
+                                <input type="checkbox" id="moveToReal" checked={moveToReal} onChange={(e) => setMoveToReal(e.target.checked)} className="h-5 w-5 rounded border-gray-300 text-[#FF8A3D] focus:ring-[#FF8A3D] dark:border-gray-700" />
+                                <span className="text-sm font-bold text-indigo-900 dark:text-indigo-200">Convertir en gasto real</span>
+                            </label>
+                            <p className="mt-2 text-xs text-indigo-700/80 dark:text-indigo-300/80">Al convertirlo, pasará a reducir el saldo disponible.</p>
                             {moveToReal && (
-                                <select
-                                    value={targetCategory}
-                                    onChange={(e) => setTargetCategory(e.target.value)}
-                                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
-                                >
-                                    {realCategories.map(c => (
-                                        <option key={c.id} value={c.name}>{c.name}</option>
-                                    ))}
-                                </select>
+                                <div className="mt-3">
+                                    <InputLabel htmlFor="targetCategory" value="Categoría real" className="text-xs font-bold text-indigo-700 dark:text-indigo-300" />
+                                    <select id="targetCategory" value={targetCategory} onChange={(e) => setTargetCategory(e.target.value)} className="mt-1 min-h-11 w-full rounded-xl border-indigo-200 bg-white text-sm text-gray-800 dark:border-indigo-900 dark:bg-gray-900 dark:text-white">
+                                        {realCategories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                    </select>
+                                </div>
                             )}
                         </div>
                     )}
 
                     <div>
-                        <InputLabel htmlFor="timestamp" value="Fecha del gasto" className="dark:text-gray-300" />
-                        <div className="flex items-center gap-2 mt-1">
-                            <TextInput
-                                id="timestamp"
-                                type="text"
-                                value={formatTimestamp(Number(data.timestamp))}
-                                readOnly
-                                className="flex-1 dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowDatePicker(true)}
-                                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:opacity-80"
-                            >
-                                Elegir
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => setData('timestamp', Date.now())}
-                                className="px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:opacity-80"
-                            >
-                                Hoy
-                            </button>
+                        <InputLabel htmlFor="timestamp" value="Fecha y hora" className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400" />
+                        <TextInput id="timestamp" type="text" value={formatTimestamp(Number(data.timestamp))} readOnly className="mt-2 block min-h-12 w-full dark:bg-gray-800 dark:text-white dark:border-gray-700" />
+                        <div className="mt-2 grid grid-cols-2 gap-2">
+                            <button type="button" onClick={() => setShowDatePicker(true)} className="touch-feedback min-h-11 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-700 dark:border-gray-700 dark:text-gray-200">Elegir fecha</button>
+                            <button type="button" onClick={() => setData('timestamp', Date.now())} className="touch-feedback min-h-11 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-700 dark:border-gray-700 dark:text-gray-200">Ahora</button>
                         </div>
-                        <p className="text-xs text-gray-400 font-bold dark:text-gray-500 mt-2">
-                            Tasa BCV aplicada automáticamente.
-                        </p>
                     </div>
 
-                    <div>
-                        <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
-                            Equivalente: $ {data.amount_bs && data.rate ? (parseFloat(data.amount_bs) / parseFloat(data.rate)).toFixed(2) : '0.00'}
-                        </p>
+                    <div className={`rounded-xl border p-4 ${impactTone}`} aria-live="polite">
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Efecto de este gasto</p>
+                        <p className="mt-1 text-sm font-black">{impactTitle}</p>
+                        {isCash && amountBs > 0 && <p className="mt-1 text-xs font-bold tabular">Saldo después: Bs {fmtBs(availableBalance - amountBs)}</p>}
                     </div>
                 </div>
 
-                <div className="mt-8 flex flex-col-reverse sm:flex-row gap-3">
-                    <SecondaryButton onClick={handleClose} className="w-full sm:w-auto justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600">
-                        Cancelar
-                    </SecondaryButton>
-                    <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                        {expense ? 'Guardar Cambios' : 'Crear Gasto'}
+                <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <SecondaryButton onClick={handleClose} className="min-h-12 w-full justify-center dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 sm:w-auto">Cancelar</SecondaryButton>
+                    <PrimaryButton className="min-h-12 w-full justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity sm:w-auto" disabled={processing}>
+                        {processing ? 'Guardando…' : expense ? 'Guardar cambios' : 'Guardar gasto'}
                     </PrimaryButton>
                 </div>
             </form>

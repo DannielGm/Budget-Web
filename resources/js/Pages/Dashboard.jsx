@@ -5,6 +5,7 @@ import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import MonthSummaryStrip from '@/Components/Budget/MonthSummaryStrip';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
+import ExpenseCard from '@/Components/Budget/ExpenseCard';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
 import CategoryForm from '@/Components/Budget/CategoryForm';
@@ -601,97 +602,18 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <div
+                <ExpenseCard
                     ref={expensesContainerRef}
-                    className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors"
-                >
-                    <div className="flex justify-between items-center mb-3">
-                        <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setShowCategoryAccordion(true)}>
-                            <h4 className="font-bold text-lg dark:text-white uppercase tracking-wide">
-                                {selectedCategory?.name || 'Categoría'}
-                            </h4>
-                            <Edit2 size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                        <button
-                            onClick={handleAddExpense}
-                            className="bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white p-2 rounded-xl shadow-sm hover:scale-105 active:scale-95 transition-all"
-                        >
-                            <Plus size={20} />
-                        </button>
-                    </div>
-
-                    {selectedCategory && (
-                        <div className="mb-4">
-                            <span className={cn(
-                                "text-xs font-black px-2 py-0.5 rounded uppercase tracking-widest",
-                                selectedCategory.is_presupuesto
-                                    ? (isBudgetOk ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400")
-                                    : "bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400"
-                            )}>
-                                {selectedCategory.is_presupuesto ? 'Presupuesto' : (selectedCategory.cash_expense ? 'Contado' : 'Crédito')}
-                            </span>
-                        </div>
-                    )}
-
-                    <div className="space-y-4">
-                        {(selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).length === 0 ? (
-                            <p className="text-center text-sm text-gray-400 font-bold py-6">
-                                {dateFilter ? 'No hay gastos en esa fecha' : 'Sin gastos todavía'}
-                            </p>
-                        ) : (selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).map(expense => (
-                            <div key={expense.id} className="flex justify-between items-center group select-none" onDoubleClick={() => handleEditExpense(expense)}>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <p className="font-bold text-sm dark:text-white group-hover:text-[#FF8A3D] transition-colors">
-                                            {expense.label}
-                                        </p>
-                                        <div className="hidden group-hover:flex items-center gap-1">
-                                            <button onClick={() => handleDeleteExpense(expense)} className="p-1 text-gray-400 hover:text-red-500" title="Eliminar gasto">
-                                                <Trash2 size={12} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <p className="text-[10px] text-gray-400 font-medium">
-                                        {new Date(expense.timestamp).toLocaleDateString('es-ES')} {new Date(expense.timestamp).toLocaleTimeString('es-ES', {hour: '2-digit', minute:'2-digit'})}
-                                    </p>
-                                </div>
-                                <div className="text-right">
-                                    <p className={cn(
-                                        "font-black text-sm transition-colors",
-                                        selectedCategory?.is_presupuesto
-                                            ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
-                                            : "dark:text-white"
-                                    )}>
-                                        Bs {parseFloat(expense.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
-                                    <p className="text-[10px] text-gray-400 font-bold">
-                                        $ {(parseFloat(expense.amount_bs) / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="h-px bg-gray-100 dark:bg-gray-800 my-4" />
-
-                    <div className="flex justify-between items-center">
-                        <span className="font-bold text-xs text-gray-400 uppercase tracking-widest">TOTAL</span>
-                        <div className="text-right">
-                            <span className={cn(
-                                "font-black text-lg transition-colors block",
-                                selectedCategory?.is_presupuesto
-                                    ? (isBudgetOk ? "text-green-600 dark:text-green-400" : "text-red-500")
-                                    : "dark:text-white"
-                            )}>
-                                Bs {parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                            <span className="text-[10px] text-gray-400 font-bold">
-                                $ {budget.income_rate > 0 ? (parseFloat((selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)).reduce((sum, e) => sum + parseFloat(e.amount_bs), 0) || 0) / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
+                    category={selectedCategory}
+                    expenses={selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)}
+                    monthRate={budget.income_rate}
+                    isBudgetOk={isBudgetOk}
+                    dateFilter={dateFilter}
+                    onSelectCategory={() => setShowCategoryAccordion(true)}
+                    onAdd={handleAddExpense}
+                    onEdit={handleEditExpense}
+                    onDelete={handleDeleteExpense}
+                />
                 <footer className="text-center pb-8">
                     <p className="text-[10px] text-gray-400 font-bold tracking-widest uppercase">
                         Budget keeper - {version.replace('alpha ', '')}

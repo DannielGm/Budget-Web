@@ -68,20 +68,26 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
                 <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-bold tabular text-gray-400"><span>{points[0]?.label}</span><span className="truncate text-gray-500">{changeText}</span><span className="shrink-0">{points.at(-1)?.label}</span></div>
             </> : <div className="flex h-[220px] flex-col items-center justify-center text-center"><p className="text-sm font-bold text-gray-600 dark:text-gray-300">Aún no hay movimientos</p><p className="mt-1 text-xs text-gray-400">Tu flujo aparecerá aquí conforme lo registres.</p></div>}
             {metric === 'expenses' && series.planned > 0 && (() => {
-                const usedPercent = series.planned > 0 ? Math.min(100, (series.spent / series.planned) * 100) : 0;
-                const isOver = series.remaining < 0;
+                const availableAmount = Number(budget.available_balance_bs) || 0;
+                const rawCoveragePercent = availableAmount > 0
+                    ? (series.planned / availableAmount) * 100
+                    : Infinity;
+                const coveragePercent = Math.min(100, Number.isFinite(rawCoveragePercent)
+                    ? rawCoveragePercent
+                    : 100);
+                const isOver = !isAffordable;
                 return (
                     <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/60">
                         <div className="mb-2 flex items-center justify-between gap-2">
                             <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Seguimiento del presupuesto</p>
-                            <span className={`text-[10px] font-black ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>{usedPercent.toFixed(0)}% utilizado</span>
+                            <span className={`text-[10px] font-black ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>{rawCoveragePercent.toFixed(0)}% del disponible</span>
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                             <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Plan</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.planned, 0)}</p></div>
                             <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Disponible</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.spent, 0)}</p></div>
                             <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Restante</p><p className={`mt-1 truncate text-xs font-black tabular ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>Bs {fmtBs(series.remaining, 0)}</p></div>
                         </div>
-                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="progressbar" aria-label="Uso del presupuesto" aria-valuemin="0" aria-valuemax="100" aria-valuenow={usedPercent}><div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, usedPercent)}%` }} /></div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="progressbar" aria-label="Plan requerido respecto al saldo disponible" aria-valuemin="0" aria-valuemax="100" aria-valuenow={coveragePercent}><div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, coveragePercent)}%` }} /></div>
                     </div>
                 );
             })()}
