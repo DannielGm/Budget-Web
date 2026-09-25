@@ -16,7 +16,6 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
         month_id: monthId,
         cash_expense: category?.cash_expense ?? true,
         is_presupuesto: category?.is_presupuesto ?? false,
-        planned_bs: category?.planned_bs || '',
         debt_id: category?.debt_id || '',
         type: '', // we will map this to the backend 'type' field
     });
@@ -43,7 +42,6 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                 month_id: monthId,
                 cash_expense: category.cash_expense,
                 is_presupuesto: category.is_presupuesto,
-                planned_bs: category.planned_bs || '',
                 debt_id: category.debt_id || '',
                 type: category.is_presupuesto ? 'presupuesto' : (category.cash_expense ? 'contado' : 'credito')
             });
@@ -55,7 +53,6 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                 month_id: monthId,
                 cash_expense: true,
                 is_presupuesto: false,
-                planned_bs: '',
                 debt_id: '',
                 type: 'contado'
             });
@@ -133,21 +130,6 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
                             )}
                         </select>
                     </div>
-
-                    {currentType === 'presupuesto' && (
-                        <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 mt-4">
-                            <InputLabel htmlFor="planned_bs" value="Monto Planificado (Bs) [Opcional]" className="dark:text-gray-300" />
-                            <FormattedNumberInput
-                                id="planned_bs"
-                                name="planned_bs"
-                                value={data.planned_bs}
-                                className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                                onChange={(e) => setData('planned_bs', e.target.value)}
-                            />
-                            <InputError message={errors.planned_bs} className="mt-2" />
-                            <p className="text-[10px] text-gray-500 mt-2">Este monto servirá de referencia en la pestaña de Gastos.</p>
-                        </div>
-                    )}
 
                     {currentType === 'credito' && (
                         <div className="bg-gray-50 dark:bg-gray-800/50 p-4 rounded-xl border border-gray-100 dark:border-gray-800 mt-4">

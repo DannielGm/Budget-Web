@@ -123,7 +123,6 @@ class BudgetService
                         'name' => $category->name,
                         'cash_expense' => $category->cash_expense,
                         'is_presupuesto' => $category->is_presupuesto,
-                        'planned_bs' => $category->planned_bs,
                         'position' => $category->position,
                         'debt_id' => $newDebtId,
                     ]);
