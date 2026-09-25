@@ -78,7 +78,7 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
                         </div>
                         <div className="grid grid-cols-3 gap-2 text-center">
                             <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Plan</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.planned, 0)}</p></div>
-                            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Gastado</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.spent, 0)}</p></div>
+                            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Disponible</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.spent, 0)}</p></div>
                             <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Restante</p><p className={`mt-1 truncate text-xs font-black tabular ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>Bs {fmtBs(series.remaining, 0)}</p></div>
                         </div>
                         <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="progressbar" aria-label="Uso del presupuesto" aria-valuemin="0" aria-valuemax="100" aria-valuenow={usedPercent}><div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, usedPercent)}%` }} /></div>

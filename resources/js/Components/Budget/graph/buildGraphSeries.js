@@ -72,8 +72,14 @@ export function buildGraphSeries({ budget, categories = [], rangeMode = 'Mes', d
     // Planning status always uses the complete monthly plan. Only the red
     // expense line may reflect the category selected in the dashboard.
     const budgetCategories = budget.categories.filter((category) => category.is_presupuesto);
-    const planned = budgetCategories.reduce((sum, category) => sum + n(category.planned_bs), 0);
-    const spent = budgetCategories.reduce((sum, category) => sum + (budget.expenses || []).filter((expense) => expense.category_name === category.name).reduce((subtotal, expense) => subtotal + n(expense.amount_bs), 0), 0);
+
+    // The "planned" amount is the sum of all expenses logged inside `is_presupuesto` categories.
+    const planned = budgetCategories.reduce((sum, category) => sum + (budget.expenses || []).filter((expense) => expense.category_name === category.name).reduce((subtotal, expense) => subtotal + n(expense.amount_bs), 0), 0);
+
+    // The "spent" amount is the available balance minus the planned amount.
+    // BUT since the user wants "Gastado" to be the "Disponible" and show "Saldo Disponible", we map it directly:
+    const spent = n(budget.available_balance_bs);
+    const remaining = spent - planned;
 
     // The backend value is authoritative for the current month. Reconcile any
     // residual (for example a movement type not yet exposed in the timeline)
