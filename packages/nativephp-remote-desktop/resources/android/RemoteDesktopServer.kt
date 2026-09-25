@@ -154,7 +154,15 @@ object RemoteDesktopServer {
             phpHeaders["X-Forwarded-Host"] = "$ip:$port"
             phpHeaders["X-Forwarded-Proto"] = "http"
             val request = PHPRequest(path, method, body, phpHeaders, queryString = query)
-            writeRawResponse(output, activity.phpBridge.handleLaravelRequest(request, headers["Cookie"].orEmpty()), origin)
+            val raw = activity.phpBridge.handleLaravelRequest(request, headers["Cookie"].orEmpty())
+            if (raw.isBlank()) {
+                // A blank upstream response used to reach the browser as a white
+                // page; surface it instead so the failure is diagnosable.
+                writeResponse(output, 502, mapOf("Content-Type" to "text/html; charset=utf-8"),
+                    errorPage("El servidor no devolvió una respuesta", "$method $path"))
+            } else {
+                writeRawResponse(output, raw, origin)
+            }
         } catch (_: Exception) {
         } finally {
             try { client.close() } catch (_: Exception) {}
@@ -175,18 +183,37 @@ object RemoteDesktopServer {
 
     private fun serveStatic(publicRoot: String, path: String, output: BufferedOutputStream): Boolean {
         val relative = path.removePrefix("/").substringBefore('?')
-        if (relative.isBlank() || relative.contains("..") ||
-            (!relative.startsWith("build/") && !relative.startsWith("_assets/") && !relative.startsWith("storage/"))
-        ) return false
+        if (relative.isBlank() || relative.contains("..")) return false
         val root = File(publicRoot).canonicalFile
-        val file = File(root, relative).canonicalFile
-        if (!file.path.startsWith(root.path + File.separator) || !file.isFile) return false
+        // Mirror the phone WebView's resolution: the requested path first, then
+        // the vendor/build fallbacks it uses for Vite output.
+        val candidates = listOf("$root/$relative", "$root/vendor/$relative", "$root/build/$relative")
+        val file = candidates
+            .map { File(it).canonicalFile }
+            .firstOrNull { it.path.startsWith(root.path + File.separator) && it.isFile }
+            ?: return false
         val mime = when (file.extension.lowercase()) {
-            "js" -> "text/javascript"; "css" -> "text/css"; "json" -> "application/json"
+            "js", "mjs" -> "text/javascript; charset=utf-8"
+            "css" -> "text/css; charset=utf-8"
+            "json", "map" -> "application/json; charset=utf-8"
             "svg" -> "image/svg+xml"; "png" -> "image/png"; "jpg", "jpeg" -> "image/jpeg"
-            "woff2" -> "font/woff2"; else -> "application/octet-stream"
+            "webp" -> "image/webp"; "gif" -> "image/gif"; "ico" -> "image/x-icon"
+            "woff2" -> "font/woff2"; "woff" -> "font/woff"; "ttf" -> "font/ttf"
+            "eot" -> "application/vnd.ms-fontobject"; "html" -> "text/html; charset=utf-8"
+            "txt" -> "text/plain; charset=utf-8"
+            else -> "application/octet-stream"
         }
-        output.write("HTTP/1.1 200 OK\r\nContent-Type: $mime\r\nContent-Length: ${file.length()}\r\nConnection: close\r\n\r\n".toByteArray())
+        val head = buildString {
+            append("HTTP/1.1 200 OK\r\n")
+            append("Content-Type: $mime\r\n")
+            append("Content-Length: ${file.length()}\r\n")
+            append("Cache-Control: max-age=86400, public\r\n")
+            if (mime.startsWith("font/") || file.extension.lowercase() == "eot") {
+                append("Access-Control-Allow-Origin: *\r\n")
+            }
+            append("Connection: close\r\n\r\n")
+        }
+        output.write(head.toByteArray(StandardCharsets.US_ASCII))
         file.inputStream().use { it.copyTo(output) }
         output.flush()
         return true
@@ -194,10 +221,18 @@ object RemoteDesktopServer {
 
     private fun pairingPage(submitted: Boolean): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto · BKeeper</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(360px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:22px;margin:0 0 8px}p{color:#9ca3af;line-height:1.5}label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 8px;color:#9ca3af}input,button{box-sizing:border-box;width:100%;border-radius:12px;padding:13px;font:inherit}input{background:#0d0d12;border:1px solid #374151;color:white;letter-spacing:.12em;text-transform:uppercase}button{margin-top:12px;background:#9b7bff;color:white;border:0;font-weight:700}.err{color:#fca5a5;font-size:13px}</style><div class="card"><h1>Escritorio remoto</h1><p>Introduce el código temporal que aparece en BKeeper.</p><form method="post" action="/remote-desktop/pair"><label>Código de acceso</label><input name="code" required autofocus autocomplete="one-time-code" inputmode="text" pattern="[A-Za-z0-9-]{6,20}">${if (submitted) "<p class=err>El código no coincide o venció.</p>" else ""}<button>Conectar</button></form><p>La conexión se cerrará automáticamente después de 15 minutos.</p></div></html>"""
 
+    private fun errorPage(title: String, detail: String): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(420px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:20px;margin:0 0 10px}p{color:#9ca3af;line-height:1.6}code{display:block;margin-top:12px;background:#0d0d12;border:1px solid #374151;border-radius:10px;padding:10px;font-size:12px;color:#fca5a5;word-break:break-all}</style><div class="card"><h1>$title</h1><p>Cierra BKeeper en el teléfono y vuelve a activar el escritorio remoto.</p><code>${detail.replace("&", "&amp;").replace("<", "&lt;")}</code></div></html>"""
+
+    private fun statusReason(status: Int): String = when (status) {
+        200 -> "OK"; 303 -> "See Other"; 400 -> "Bad Request"
+        404 -> "Not Found"; 410 -> "Gone"; 502 -> "Bad Gateway"
+        503 -> "Service Unavailable"; else -> "OK"
+    }
+
     private fun writeResponse(out: BufferedOutputStream, status: Int, headers: Map<String, String>, body: String) {
         val bytes = body.toByteArray(StandardCharsets.UTF_8)
         val head = buildString {
-            append("HTTP/1.1 $status OK\r\n")
+            append("HTTP/1.1 $status ${statusReason(status)}\r\n")
             headers.forEach { (key, value) -> append("$key: $value\r\n") }
             append("Content-Length: ${bytes.size}\r\nConnection: close\r\n\r\n")
         }
@@ -205,20 +240,53 @@ object RemoteDesktopServer {
     }
 
     private fun writeRawResponse(out: BufferedOutputStream, raw: String, origin: String) {
-        val chunks = raw.split("\r\n\r\n", limit = 2)
-        val body = (chunks.getOrNull(1) ?: "").replace("http://127.0.0.1", origin)
+        val separator = if (raw.contains("\r\n\r\n")) "\r\n\r\n" else "\n\n"
+        val index = raw.indexOf(separator)
+        val head = if (index >= 0) raw.substring(0, index) else ""
+        var body = if (index >= 0) raw.substring(index + separator.length) else raw
         val bodyBytes = body.toByteArray(StandardCharsets.UTF_8)
-        val headers = chunks.firstOrNull().orEmpty().lines().filter { line ->
-            !line.startsWith("Content-Length:", true) && !line.startsWith("Transfer-Encoding:", true)
-        }.joinToString("\r\n") { line ->
+
+        // processRawPHPResponse() can hand back a bare body with no head at all.
+        var lines = head.lines().filter { line ->
+            val name = line.substringBefore(':', "")
+            !name.equals("Content-Length", true) && !name.equals("Transfer-Encoding", true)
+        }
+        if (lines.none { it.startsWith("HTTP/") }) {
+            lines = listOf("HTTP/1.1 200 OK") + lines
+        }
+        if (lines.none { it.substringBefore(':', "").equals("Content-Type", true) }) {
+            lines = lines + listOf("Content-Type: text/html; charset=utf-8")
+        }
+
+        // Rewrite loopback origins and re-host cookies for the LAN client so the
+        // computer's browser holds a valid Laravel session for the LAN host.
+        body = body
+            .replace("https://127.0.0.1", origin)
+            .replace("http://127.0.0.1", origin)
+        lines = lines.map { line ->
             when {
-                line.startsWith("Location:", true) -> "Location: ${line.substringAfter(':').trim().replace("http://127.0.0.1", origin)}"
-                line.startsWith("Set-Cookie:", true) -> "Set-Cookie: ${line.substringAfter(':').trim().replace(Regex(";\\s*Domain=[^;]+", RegexOption.IGNORE_CASE), "")}" 
+                line.startsWith("Location:", true) ->
+                    "Location: " + line.substringAfter(':').trim()
+                        .replace("https://127.0.0.1", origin)
+                        .replace("http://127.0.0.1", origin)
+                line.startsWith("Set-Cookie:", true) -> {
+                    val cleaned = line.substringAfter(':').trim()
+                        .replace("https://127.0.0.1", origin)
+                        .replace("http://127.0.0.1", origin)
+                        .replace(Regex(";\\s*Domain=[^;]*", RegexOption.IGNORE_CASE), "")
+                        .replace(Regex(";\\s*Secure", RegexOption.IGNORE_CASE), "")
+                    cleaned
+                }
                 else -> line
             }
         }
-        out.write("$headers\r\nContent-Length: ${bodyBytes.size}\r\nConnection: close\r\n\r\n".toByteArray(StandardCharsets.US_ASCII))
-        out.write(bodyBytes); out.flush()
+
+        out.write(
+            (lines.joinToString("\r\n") + "\r\nContent-Length: ${bodyBytes.size}\r\nConnection: close\r\n\r\n")
+                .toByteArray(StandardCharsets.US_ASCII)
+        )
+        out.write(bodyBytes)
+        out.flush()
     }
 
     private fun wifiAddress(context: Context): String? {
