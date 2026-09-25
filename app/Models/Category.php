@@ -13,6 +13,7 @@ class Category extends Model
         'name',
         'cash_expense',
         'is_presupuesto',
+        'planned_bs',
         'position',
         'debt_id',
     ];
@@ -20,6 +21,7 @@ class Category extends Model
     protected $casts = [
         'cash_expense' => 'boolean',
         'is_presupuesto' => 'boolean',
+        'planned_bs' => 'string',
     ];
 
     public function budget(): BelongsTo

@@ -14,6 +14,7 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'cash_expense' => 'required|boolean',
             'is_presupuesto' => 'required|boolean',
+            'planned_bs' => 'nullable|numeric|min:0',
             'debt_id' => 'nullable|integer|exists:debts,id',
         ]);
 
@@ -23,6 +24,13 @@ class CategoryController extends Controller
         // Ensure debt_id is wiped if it's not a credit category anymore
         if ($validated['cash_expense'] || $validated['is_presupuesto']) {
             $validated['debt_id'] = null;
+        }
+
+        // Ensure planned_bs defaults to 0 if null, and wiped if not presupuesto
+        if (!$validated['is_presupuesto']) {
+            $validated['planned_bs'] = 0;
+        } else {
+            $validated['planned_bs'] = $validated['planned_bs'] ?? 0;
         }
 
         Category::create($validated);
@@ -36,6 +44,7 @@ class CategoryController extends Controller
             'name' => 'required|string|max:255',
             'cash_expense' => 'sometimes|boolean',
             'is_presupuesto' => 'sometimes|boolean',
+            'planned_bs' => 'nullable|numeric|min:0',
             'debt_id' => 'nullable|integer|exists:debts,id',
         ]);
 
@@ -44,6 +53,13 @@ class CategoryController extends Controller
         $isPresupuesto = $validated['is_presupuesto'] ?? $category->is_presupuesto;
         if ($isCash || $isPresupuesto) {
             $validated['debt_id'] = null;
+        }
+
+        // Ensure planned_bs defaults to 0 if null, and wiped if not presupuesto
+        if (!$isPresupuesto) {
+            $validated['planned_bs'] = 0;
+        } else {
+            $validated['planned_bs'] = $validated['planned_bs'] ?? 0;
         }
 
         // If name changes, we need to update all associated expenses
