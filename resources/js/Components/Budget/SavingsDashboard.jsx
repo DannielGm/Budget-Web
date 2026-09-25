@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowDownToLine, ArrowUpFromLine, Landmark, Wallet, Banknote, History, ArrowRightLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { fmtBs, fmtUsd } from '@/lib/money';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -36,7 +37,8 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
         ? budget.total_savings_usd
         : pools.reduce((acc, p) => acc + parseFloat(p.balance_usd || 0), 0);
 
-    const totalDisplay = parseFloat(totalUsd).toLocaleString('es-ES', { minimumFractionDigits: 2 });
+    const totalDisplay = fmtUsd(totalUsd);
+    const totalBs = Number(budget.income_rate) > 0 ? Number(totalUsd || 0) * Number(budget.income_rate) : 0;
 
     return (
         <div className="space-y-6">
@@ -64,7 +66,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                         $ {totalDisplay}
                     </h1>
                     <p className="text-white/70 text-sm font-bold mt-1">
-                        ≈ Bs {(parseFloat(totalUsd) * parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                        ≈ Bs {fmtBs(totalBs)}
                     </p>
                 </div>
 
@@ -82,7 +84,12 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                 {CAT_ICONS[name]}
                             </div>
                             <span className="text-[10px] uppercase font-bold text-white/60 tracking-wider mb-1">{POOL_LABELS[name] || name}</span>
-                            <span className="text-sm font-black">$ {parseFloat(balance_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</span>
+                            <span className="text-sm font-black tabular">
+                                $ {fmtUsd(balance_usd)}
+                            </span>
+                            <span className="block mt-1 text-[10px] font-medium text-white/60 tabular">
+                                ≈ Bs {fmtBs(Number(balance_usd || 0) * Number(budget.income_rate || 0))}
+                            </span>
                         </div>
                     ))}
                 </div>

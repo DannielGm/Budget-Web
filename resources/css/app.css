@@ -31,9 +31,69 @@
     --brand: #9b7bff;
 }
 
+@layer components {
+    /* Interactive controls: visible keyboard focus and consistent touch feedback. */
+    button,
+    a,
+    [role='button'] {
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    [role='button']:focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+    }
+
+    /* Apply a restrained press response to controls without changing layout. */
+    .touch-feedback {
+        transition: transform 120ms ease, background-color 150ms ease, color 150ms ease, opacity 150ms ease;
+    }
+
+    .touch-feedback:active {
+        transform: scale(0.96);
+    }
+
+    /* Settings/actions menu rows: keep one action per line at every size. */
+    .menu-button {
+        display: flex;
+        width: 100%;
+        align-items: center;
+        justify-content: flex-start;
+        white-space: nowrap;
+        border-radius: 0.75rem;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-size: 0.875rem;
+        line-height: 1.25rem;
+        color: inherit;
+        transition: background-color 150ms, color 150ms;
+    }
+
+    .menu-button:hover {
+        background-color: #f3f4f6;
+    }
+
+    .dark .menu-button:hover {
+        background-color: #1f2937;
+    }
+}
+
 @layer utilities {
     /* Aligned, fixed-width digits — essential for money columns. */
     .tabular {
         font-variant-numeric: tabular-nums;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
     }
 }

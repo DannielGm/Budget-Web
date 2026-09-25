@@ -3,6 +3,7 @@ import Modal from '@/Components/Modal';
 import { CreditCard, ArrowDownToLine } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -22,6 +23,9 @@ export default function DebtSummaryModal({ show, onClose, debts = [], currentRat
     }, []).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
     const totalRemaining = (debts || []).reduce((sum, d) => sum + ((parseFloat(d.opening_bs || 0) + parseFloat(d.credit_expenses_bs || 0)) - parseFloat(d.payment_bs || 0)), 0) + creditPurchasesBs;
+    const totalDebtBeforePayments = (debts || []).reduce((sum, debt) => sum + parseFloat(debt.opening_bs || 0) + parseFloat(debt.credit_expenses_bs || 0), 0) + creditPurchasesBs;
+    const totalPaid = (debts || []).reduce((sum, debt) => sum + parseFloat(debt.payment_bs || 0), 0);
+    const paidPercentage = totalDebtBeforePayments > 0 ? Math.min(100, (totalPaid / totalDebtBeforePayments) * 100) : 0;
 
     return (
         <Modal show={show} onClose={onClose} maxWidth="sm">
@@ -42,11 +46,24 @@ export default function DebtSummaryModal({ show, onClose, debts = [], currentRat
 
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 mb-6 border border-gray-100 dark:border-gray-800">
                     <p className="text-sm text-gray-500 dark:text-gray-400 font-bold mb-1">Total Pendiente</p>
-                    <p className="text-3xl font-black font-serif text-gray-900 dark:text-white tracking-tight">
-                        Bs {totalRemaining.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <p className="text-3xl font-black font-serif text-gray-900 dark:text-white tracking-tight tabular">
+                        Bs {fmtBs(totalRemaining)}
                     </p>
-                    <p className="text-xs text-[#FF8A3D] dark:text-[#9B7BFF] font-bold uppercase tracking-wider mt-1">
-                        $ {currentRate > 0 ? (totalRemaining / parseFloat(currentRate)).toLocaleString('es-ES', {minimumFractionDigits: 2}) : '0.00'}
+                    <p className="text-xs text-[#FF8A3D] dark:text-[#9B7BFF] font-bold uppercase tracking-wider mt-1 tabular">
+                        ≈ $ {fmtUsd(currentRate > 0 ? totalRemaining / parseFloat(currentRate) : 0)}
+                    </p>
+                </div>
+
+                <div className="mb-6 rounded-2xl border border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-800 p-4">
+                    <div className="flex items-center justify-between gap-3 mb-2">
+                        <span className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Progreso pagado</span>
+                        <span className="text-sm font-black tabular text-green-600 dark:text-green-400">{fmtPct(paidPercentage, 0)}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800" role="progressbar" aria-valuenow={Math.round(paidPercentage)} aria-valuemin="0" aria-valuemax="100">
+                        <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${paidPercentage}%` }} />
+                    </div>
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400 tabular">
+                        {fmtPct(paidPercentage, 0)}% pagado - Bs {fmtBs(totalPaid)} <span className="text-gray-400">· ≈ $ {fmtUsd(currentRate > 0 ? totalPaid / parseFloat(currentRate) : 0)}</span>
                     </p>
                 </div>
 

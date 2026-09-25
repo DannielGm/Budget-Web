@@ -3,6 +3,7 @@ import { Head, usePage, router } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
+import MonthSummaryStrip from '@/Components/Budget/MonthSummaryStrip';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import BudgetForm from '@/Components/Budget/BudgetForm';
 import DebtForm from '@/Components/Budget/DebtForm';
@@ -17,6 +18,7 @@ import Modal from '@/Components/Modal';
 import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, CreditCard, Settings as SettingsIcon, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
@@ -351,17 +353,19 @@ export default function Dashboard() {
                             <button
                                 onClick={goToToday}
                                 title="Ir a hoy"
-                                className="p-1.5 shrink-0 text-white hover:bg-white/10 rounded-full transition-all"
+                                className="touch-feedback p-1.5 shrink-0 text-white hover:bg-white/10 rounded-full"
                             >
                                 <Home size={18} />
                             </button>
                         )}
                         <button
-                            className="flex items-center min-w-0 cursor-pointer text-left"
+                            type="button"
                             onClick={() => setShowCalendar(true)}
                             title="Elegir mes o día"
+                            aria-label="Elegir mes o día"
+                            className="touch-feedback flex-1 min-w-0 max-w-full text-left cursor-pointer"
                         >
-                            <h2 className="text-lg sm:text-2xl font-black font-serif text-white uppercase tracking-tight truncate">
+                            <h2 className="block min-w-0 max-w-full truncate whitespace-nowrap text-lg sm:text-2xl font-black font-serif text-white uppercase tracking-tight">
                                 {headerLabel}
                             </h2>
                         </button>
@@ -385,7 +389,7 @@ export default function Dashboard() {
                                             type="button"
                                             onClick={() => setIsViewSelectorOpen((prev) => !prev)}
                                             className={cn(
-                                                "p-1.5 rounded-full transition-all flex items-center justify-center",
+                                                "touch-feedback p-1.5 rounded-full flex items-center justify-center",
                                                 isViewSelectorOpen
                                                     ? "bg-white text-[#FF8A3D] dark:text-[#9B7BFF] shadow-sm"
                                                     : "bg-white/20 text-white hover:bg-white/30"
@@ -412,7 +416,7 @@ export default function Dashboard() {
                                                                 setIsViewSelectorOpen(false);
                                                             }}
                                                             className={cn(
-                                                                "p-2 rounded-xl transition-all flex items-center gap-2 text-xs font-semibold whitespace-nowrap pr-3",
+                                                                "touch-feedback p-2 rounded-xl flex items-center gap-2 text-xs font-semibold whitespace-nowrap pr-3",
                                                                 isCurrent
                                                                     ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-sm"
                                                                     : "text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
@@ -431,12 +435,12 @@ export default function Dashboard() {
                             })()}
                         </div>
 
-                        <button onClick={toggleTheme} className="p-1.5 text-white hover:bg-white/10 rounded-full transition-all">
+                        <button onClick={toggleTheme} className="touch-feedback p-1.5 text-white hover:bg-white/10 rounded-full" title={isDark ? 'Activar tema claro' : 'Activar tema oscuro'} aria-label={isDark ? 'Activar tema claro' : 'Activar tema oscuro'}>
                             {isDark ? <Sun size={20} /> : <Moon size={20} />}
                         </button>
                         <button
                             onClick={() => setShowSettingsModal(true)}
-                            className="p-1.5 text-white hover:bg-white/10 rounded-full transition-all"
+                            className="touch-feedback p-1.5 text-white hover:bg-white/10 rounded-full"
                             aria-label="Abrir menú de configuración"
                         >
                             <SettingsIcon size={20} />
@@ -473,6 +477,16 @@ export default function Dashboard() {
                     rate={rate}
                     dateFilter={dateFilter}
                     onEdit={() => setShowBudgetModal(true)}
+                />
+
+                <MonthSummaryStrip
+                    incomeBs={budget.income_bs}
+                    expensesBs={visibleCategories.reduce((sum, category) => {
+                        if (!category.cash_expense || category.is_presupuesto) return sum;
+                        return sum + (category.expenses || []).reduce((subtotal, expense) => subtotal + (Number(expense.amount_bs) || 0), 0);
+                    }, 0)}
+                    paidBs={budget.debts.reduce((sum, debt) => sum + (Number(debt.payment_bs) || 0), 0)}
+                    rate={budget.income_rate}
                 />
 
                 <div className="space-y-3">
@@ -562,19 +576,23 @@ export default function Dashboard() {
                             </div>
                         )}
                         {budget.debts.map(debt => {
-                            const debtRemainingBs = (parseFloat(debt.opening_bs) + parseFloat(debt.credit_expenses_bs || 0)) - parseFloat(debt.payment_bs);
+                            const debtOpeningBs = parseFloat(debt.opening_bs || 0);
+                            const debtChargesBs = parseFloat(debt.credit_expenses_bs || 0);
+                            const debtPaidBs = parseFloat(debt.payment_bs || 0);
+                            const debtTotalBs = debtOpeningBs + debtChargesBs;
+                            const debtRemainingBs = debtTotalBs - debtPaidBs;
+                            const paidPercentage = debtTotalBs > 0 ? (debtPaidBs / debtTotalBs) * 100 : 0;
                             return (
-                                <div key={debt.id} className="flex justify-between items-center cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" onClick={() => handleEditDebt(debt)}>
-                                    <span className="text-xs text-gray-300 font-medium">{debt.label}</span>
-                                    <div className="text-right">
-                                        <p className="text-sm font-bold">Bs {debtRemainingBs.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-                                        <p className="text-[10px] text-gray-400 font-bold">$ {budget.income_rate > 0 ? (debtRemainingBs / parseFloat(budget.income_rate)).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}</p>
-
-                                        {parseFloat(debt.payment_bs) > 0 && (
-                                            <p className="text-[10px] text-green-400 font-bold">Pagado: Bs {parseFloat(debt.payment_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                <div key={debt.id} className="flex justify-between items-start gap-3 cursor-pointer hover:bg-white/5 p-1 rounded transition-colors" onClick={() => handleEditDebt(debt)}>
+                                    <span className="text-xs text-gray-300 font-medium min-w-0 truncate">{debt.label}</span>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-sm font-bold tabular">Bs {fmtBs(debtRemainingBs)}</p>
+                                        <p className="text-[10px] text-gray-400 font-bold tabular">$ {fmtUsd(budget.income_rate > 0 ? debtRemainingBs / parseFloat(budget.income_rate) : 0)}</p>
+                                        {debtPaidBs > 0 && (
+                                            <p className="text-[10px] text-green-400 font-bold tabular">{fmtPct(paidPercentage, 0)}% pagado - Bs {fmtBs(debtPaidBs)}</p>
                                         )}
-                                        {parseFloat(debt.credit_expenses_bs || 0) > 0 && (
-                                            <p className="text-[10px] text-red-400 font-bold">Nuevos cargos: Bs {parseFloat(debt.credit_expenses_bs).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                                        {debtChargesBs > 0 && (
+                                            <p className="text-[10px] text-red-400 font-bold tabular">Nuevos cargos: Bs {fmtBs(debtChargesBs)}</p>
                                         )}
                                     </div>
                                 </div>

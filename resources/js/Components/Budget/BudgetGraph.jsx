@@ -1,238 +1,91 @@
-import React, { useMemo } from 'react';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, Legend } from 'recharts';
+import React, { useMemo, useState } from 'react';
+import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { buildGraphSeries } from './graph/buildGraphSeries';
+import { fmtBs, fmtUsd } from '@/lib/money';
+
+const METRICS = [{ id: 'available', label: 'Saldo' }, { id: 'expenses', label: 'Gastos' }, { id: 'savings', label: 'Ahorro' }];
+const compactAxis = (value) => {
+    const amount = Math.abs(Number(value) || 0), sign = value < 0 ? '-' : '';
+    if (amount >= 1000000) return `${sign}${(amount / 1000000).toFixed(1)}M`;
+    if (amount >= 1000) return `${sign}${(amount / 1000).toFixed(amount >= 100000 ? 0 : 1)}k`;
+    return `${sign}${Math.round(amount)}`;
+};
+
+function Detail({ point, metric }) {
+    if (!point) return null;
+    const dataKey = metric === 'expenses' ? 'cashExpenses' : metric;
+    const changeKey = metric === 'expenses' ? 'expenseChange' : `${metric}Change`;
+    const value = point[dataKey] ?? 0, dailyChange = point[changeKey] ?? 0;
+    return (
+        <div className="mb-3 flex min-w-0 items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2 dark:bg-gray-800/70" aria-live="polite">
+            <div className="min-w-0"><p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-400">{point.label}</p><p className="mt-0.5 truncate text-xs font-bold text-gray-700 dark:text-gray-200">{point.events.length || 'Sin movimientos'}</p></div>
+            <div className="shrink-0 text-right tabular"><p className="text-sm font-black text-gray-900 dark:text-white">{metric === 'savings' ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p><p className={`text-[10px] font-bold ${dailyChange < 0 ? 'text-red-500' : dailyChange > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>{dailyChange ? `${dailyChange > 0 ? '+' : ''}${metric === 'savings' ? `$${fmtUsd(dailyChange)}` : `Bs ${fmtBs(dailyChange)}`}` : 'Sin cambio'}</p></div>
+        </div>
+    );
+}
 
 export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today, savingsLedger }) {
-    const visibleNames = new Set((categories ?? budget.categories).map((c) => c.name));
-
-    const data = useMemo(() => {
-        // 1. Collect EVERYTHING that touches the balance chronologically
-        const cashEvents = [
-            ...(budget.expenses || []).map(e => ({...e, type: 'expense'})),
-            ...(budget.transfers || []).filter(t => t.source_type === 'cash' || t.destination_type === 'cash').map(t => ({...t, type: 'transfer'})),
-        ];
-
-        // 2. Map savings ledger into chronological events
-        const savingsEvents = [...(savingsLedger || [])].map(s => ({ ...s, isLedgerEvent: true }));
-
-        // 3. Combine and sort all events for chronological processing
-        const allTransactions = [...cashEvents, ...savingsEvents].sort((a, b) => a.timestamp - b.timestamp);
-
-        // 4. Track running totals starting exactly from month start
-        let currentAvailable = parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs);
-        let cumulativeExpenses = 0;
-        let cumulativeSavings = 0; // Starts at 0 for THIS month's movement
-
-        const points = [{
-            time: 'Inicio',
-            timestampMs: 0, // Ensure this sorts cleanly
-            available: 0,
-            expenses: 0,
-            savings: 0,
-            displayTime: ''
-        }];
-
-        allTransactions.forEach(tx => {
-            if (tx.isLedgerEvent) {
-                // Using the historial de movimientos in the savings dashboard as a source
-                // UP by deposit or transfer to saving, DOWN by withdrawal or transfer from saving
-                if (tx.kind === 'transaction') {
-                    if (tx.type === 'deposit') {
-                        cumulativeSavings += parseFloat(tx.amount_usd || 0);
-                    } else if (tx.type === 'withdrawal') {
-                        cumulativeSavings -= parseFloat(tx.amount_usd || 0);
-                    }
-                } else if (tx.kind === 'transfer') {
-                    const usdVal = parseFloat(tx.amount_usd) || (parseFloat(tx.amount_bs) / parseFloat(tx.rate || budget.income_rate || 1)) || 0;
-                    if (tx.destination_type === 'saving') cumulativeSavings += usdVal;
-                    if (tx.source_type === 'saving') cumulativeSavings -= usdVal;
-                }
-            } else {
-                // Cash Events
-                if (tx.type === 'transfer') {
-                    if (tx.source_type === 'cash') currentAvailable -= parseFloat(tx.amount_bs || 0);
-                    if (tx.destination_type === 'cash') currentAvailable += parseFloat(tx.amount_bs || 0);
-                } else if (tx.type === 'expense') {
-                    const category = budget.categories.find(c => c.name === tx.category_name);
-                    if (category?.cash_expense && !category?.is_presupuesto) {
-                        currentAvailable -= parseFloat(tx.amount_bs || 0);
-                    }
-                    // Only graph expenses if they are in the selected category filter
-                    if (visibleNames.has(tx.category_name) && !category?.is_presupuesto) {
-                        cumulativeExpenses += parseFloat(tx.amount_bs || 0);
-                    }
-                }
-            }
-
-            const date = new Date(tx.timestamp);
-            points.push({
-                time: tx.timestamp,
-                timestampMs: tx.timestamp,
-                available: currentAvailable,
-                expenses: cumulativeExpenses,
-                savings: cumulativeSavings,
-                displayTime: `${date.getDate()}/${date.getMonth() + 1}`
-            });
-        });
-
-        // 5. Post-calculation Filtering: Slice the array based on user's time selection
-        let sliced = points;
-
-        // If there's a dateFilter, or we are in a mode other than 'Mes', we need to slice
-        if (rangeMode !== 'Mes') {
-            const anchorDate = dateFilter ? dateFilter : today;
-            const end = new Date(`${anchorDate}T23:59:59`).getTime();
-            const startDays = rangeMode === '7d' ? 7 : 1;
-            const start = new Date(`${anchorDate}T00:00:00`);
-            start.setDate(start.getDate() - (startDays - 1));
-            const startTime = start.getTime();
-
-            // Include the last point BEFORE the window to act as the "starting line"
-            let startingPoint = points[0];
-            sliced = points.filter(p => {
-                if (p.timestampMs < startTime) {
-                    startingPoint = p;
-                    return false;
-                }
-                return p.timestampMs <= end;
-            });
-
-            // Adjust display times for 1d view
-            if (rangeMode === '1d') {
-                sliced.forEach(p => {
-                    if (p.timestampMs > 0) {
-                        const d = new Date(p.timestampMs);
-                        p.displayTime = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                    }
-                });
-            }
-
-            sliced = [startingPoint, ...sliced];
-        }
-
-        // 4. Force Graph Base to 0 for available and expenses, but keep savings absolute
-        const baseAvailable = sliced[0].available;
-        const baseExpenses = sliced[0].expenses;
-
-        return sliced.map(p => ({
-            ...p,
-            available: p.available - baseAvailable,
-            expenses: p.expenses - baseExpenses,
-            savings: p.savings, // Keep absolute for "Ahorro del mes"
-        }));
-
-    }, [budget, categories, rangeMode, dateFilter, today, visibleNames, savingsLedger]);
-
-    const totalPresupuesto = useMemo(() => {
-        return budget.categories
-            .filter(c => c.is_presupuesto)
-            .reduce((sum, c) => sum + (budget.expenses || []).filter(e => e.category_name === c.name).reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0), 0);
-    }, [budget]);
-
-    // isBudgetOk checks the actual global available balance vs the total presupuesto
-    const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuesto;
+    const [metric, setMetric] = useState('available');
+    const [activeIndex, setActiveIndex] = useState(null);
+    const series = useMemo(() => buildGraphSeries({ budget, categories: categories || budget.categories, rangeMode, dateFilter, today, savingsLedger }), [budget, categories, rangeMode, dateFilter, today, savingsLedger]);
+    const points = series.points, value = series.metrics[metric], periodChange = series.periodChange[metric];
+    const isUsd = metric === 'savings', rate = Number(budget.income_rate) || 0;
+    const colors = metric === 'available' ? { stroke: '#FF8A3D' } : metric === 'expenses' ? { stroke: '#EF4444' } : { stroke: '#10B981' };
+    const title = metric === 'available' ? 'Saldo disponible' : metric === 'expenses' ? 'Gastos acumulados' : 'Ahorro del mes';
+    const changeText = periodChange ? `${periodChange > 0 ? '+' : ''}${isUsd ? `$${fmtUsd(periodChange)}` : `Bs ${fmtBs(periodChange)}`}` : 'Sin cambios en el período';
+    const activePoint = activeIndex === null ? null : points[Math.max(0, Math.min(activeIndex, points.length - 1))];
+    const selectFromChart = (state) => { if (state?.activeLabel) { const index = points.findIndex((point) => point.key === state.activeLabel); if (index >= 0) setActiveIndex(index); } };
+    const move = (direction) => setActiveIndex((index) => Math.max(0, Math.min(points.length - 1, (index ?? points.length - 1) + direction)));
+    const isAffordable = Number(budget.available_balance_bs || 0) >= series.planned;
+    const health = isAffordable ? 'Presupuesto cubierto' : 'Presupuesto excedido';
+    const healthStyles = isAffordable ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20' : 'bg-red-50 text-red-600 dark:bg-red-900/20';
+    const maxExpense = Math.max(0, ...points.map((point) => Number(point.cashExpenses) || 0));
+    const expenseDomainMax = Math.max(series.planned, maxExpense, 1) * 1.1;
+    const showChart = series.hasEvents || (metric === 'expenses' && series.planned > 0);
 
     return (
-        <div className="bg-[#FFF1E7] dark:bg-[#242430] rounded-2xl p-4 h-[280px] shadow-inner transition-colors">
-            <ResponsiveContainer width="100%" height="100%" className="outline-none focus:outline-none">
-                <AreaChart data={data} style={{ outline: 'none' }}>
-                    <defs>
-                        <linearGradient id="colorAvailable" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#FF8A3D" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#FF8A3D" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorExpenses" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#EF4444" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#EF4444" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                        </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#00000010" />
-                    <XAxis
-                        dataKey="displayTime"
-                        hide={false}
-                        axisLine={false}
-                        tickLine={false}
-                        tick={{fontSize: 10, fill: '#9CA3AF'}} // Tailwind gray-400 for dark mode contrast
-                    />
-                    <YAxis hide domain={[0, 'auto']} />
-                    <Tooltip
-                        content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                                return (
-                                    <div className="bg-white dark:bg-gray-900 p-3 rounded-xl shadow-xl border border-gray-100 dark:border-gray-800 space-y-1">
-                                        <p className="text-[10px] font-black uppercase text-gray-400 mb-2">{payload[0].payload.displayTime || 'Inicio del período'}</p>
-                                        <div className="flex justify-between gap-4 items-center">
-                                            <span className="text-xs text-gray-500 font-bold">Disponible:</span>
-                                            <span className="text-sm font-black text-[#FF8A3D] dark:text-[#9B7BFF]">Bs {payload[0].payload.available.toLocaleString('es-ES')}</span>
-                                        </div>
-                                        <div className="flex justify-between gap-4 items-center">
-                                            <span className="text-xs text-gray-500 font-bold">Gastos:</span>
-                                            <span className="text-sm font-black text-red-500">Bs {payload[0].payload.expenses.toLocaleString('es-ES')}</span>
-                                        </div>
-                                        <div className="flex justify-between gap-4 items-center">
-                                            <span className="text-xs text-gray-500 font-bold">Ahorro del Mes:</span>
-                                            <span className="text-sm font-black text-green-500">$ {payload[0].payload.savings.toLocaleString('es-ES', {minimumFractionDigits: 2})}</span>
-                                        </div>
-                                    </div>
-                                );
-                            }
-                            return null;
-                        }}
-                    />
-
-                    <Legend
-                        verticalAlign="bottom"
-                        height={20}
-                        iconType="circle"
-                        wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', paddingTop: '10px' }}
-                    />
-
-                    {totalPresupuesto > 0 && (
-                        <ReferenceLine
-                            y={totalPresupuesto}
-                            stroke={isBudgetOk ? "#10B98180" : "#EF444480"}
-                            strokeDasharray="5 5"
-                            strokeWidth={2}
-                            label={{ position: 'insideTopLeft', value: 'Presupuesto Total', fill: isBudgetOk ? "#10B981" : "#EF4444", fontSize: 10, fontWeight: 'bold' }}
-                        />
-                    )}
-
-                    <Area
-                        type="monotone"
-                        dataKey="available"
-                        stroke="#FF8A3D"
-                        fillOpacity={1}
-                        fill="url(#colorAvailable)"
-                        strokeWidth={3}
-                        name="Disponible (Bs)"
-                        isAnimationActive={false}
-                    />
-                    <Area
-                        type="monotone"
-                        dataKey="expenses"
-                        stroke="#EF4444"
-                        fillOpacity={1}
-                        fill="url(#colorExpenses)"
-                        strokeWidth={2}
-                        name="Gastos (Bs)"
-                        isAnimationActive={false}
-                    />
-                    <Area
-                        type="monotone"
-                        dataKey="savings"
-                        stroke="#10B981"
-                        fillOpacity={1}
-                        fill="url(#colorSavings)"
-                        strokeWidth={2}
-                        name="Ahorrado ($)"
-                        isAnimationActive={false}
-                    />
-                </AreaChart>
-            </ResponsiveContainer>
-        </div>
+        <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900" aria-label="Flujo financiero del mes">
+            <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</p><p className="mt-1 truncate whitespace-nowrap text-2xl font-black font-serif tabular text-gray-900 dark:text-white">{isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p>{!isUsd && <p className="text-[10px] font-bold tabular text-gray-400">≈ ${fmtUsd(rate > 0 ? value / rate : 0)}</p>}</div>
+                <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${healthStyles}`}>{health}</span>
+            </div>
+            <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800" role="tablist" aria-label="Métrica del gráfico">
+                {METRICS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={metric === item.id} onClick={() => { setMetric(item.id); setActiveIndex(null); }} className={`min-h-10 rounded-lg text-xs font-black uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF8A3D] dark:focus-visible:outline-[#9B7BFF] ${metric === item.id ? 'bg-white text-[#FF8A3D] shadow-sm dark:bg-gray-700 dark:text-[#9B7BFF]' : 'text-gray-500 dark:text-gray-400'}`}>{item.label}</button>)}
+            </div>
+            {showChart ? <>
+                <Detail point={activePoint || points.at(-1)} metric={metric} />
+                <div className="h-[190px] w-full touch-pan-y select-none" role="img" aria-label={`${title}. ${isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}. Desliza para inspeccionar cada día.`} tabIndex={0} onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); } if (event.key === 'ArrowRight') { event.preventDefault(); move(1); } if (event.key === 'Escape') setActiveIndex(null); }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={points} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} onMouseMove={selectFromChart} onTouchMove={selectFromChart}>
+                            <XAxis dataKey="key" hide />
+                            <YAxis domain={metric === 'expenses' ? [0, expenseDomainMax] : ['auto', 'auto']} tickFormatter={compactAxis} width={34} tick={{ fontSize: 9, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
+                            <Tooltip content={() => null} cursor={{ stroke: '#9CA3AF', strokeDasharray: '3 3' }} />
+                            {metric === 'expenses' && series.planned > 0 && <ReferenceLine y={series.planned} stroke={isAffordable ? '#10B981' : '#EF4444'} strokeDasharray="4 4" label={{ value: `Plan Bs ${fmtBs(series.planned, 0)}`, position: 'insideTopRight', fill: isAffordable ? '#10B981' : '#EF4444', fontSize: 9, fontWeight: 700 }} />}
+                            <Line type="monotone" dataKey={metric === 'expenses' ? 'cashExpenses' : metric} stroke={colors.stroke} strokeWidth={2.5} dot={false} activeDot={{ r: 4, strokeWidth: 0, fill: colors.stroke }} isAnimationActive={false} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3 text-[10px] font-bold tabular text-gray-400"><span>{points[0]?.label}</span><span className="truncate text-gray-500">{changeText}</span><span className="shrink-0">{points.at(-1)?.label}</span></div>
+            </> : <div className="flex h-[220px] flex-col items-center justify-center text-center"><p className="text-sm font-bold text-gray-600 dark:text-gray-300">Aún no hay movimientos</p><p className="mt-1 text-xs text-gray-400">Tu flujo aparecerá aquí conforme lo registres.</p></div>}
+            {metric === 'expenses' && series.planned > 0 && (() => {
+                const usedPercent = series.planned > 0 ? Math.min(100, (series.spent / series.planned) * 100) : 0;
+                const isOver = series.remaining < 0;
+                return (
+                    <div className="mt-4 rounded-xl border border-gray-100 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-800/60">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Seguimiento del presupuesto</p>
+                            <span className={`text-[10px] font-black ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>{usedPercent.toFixed(0)}% utilizado</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Plan</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.planned, 0)}</p></div>
+                            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Gastado</p><p className="mt-1 truncate text-xs font-black tabular text-gray-800 dark:text-gray-100">Bs {fmtBs(series.spent, 0)}</p></div>
+                            <div className="min-w-0"><p className="text-[9px] font-bold uppercase tracking-wide text-gray-400">Restante</p><p className={`mt-1 truncate text-xs font-black tabular ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>Bs {fmtBs(series.remaining, 0)}</p></div>
+                        </div>
+                        <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" role="progressbar" aria-label="Uso del presupuesto" aria-valuemin="0" aria-valuemax="100" aria-valuenow={usedPercent}><div className={`h-full rounded-full ${isOver ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${Math.max(0, usedPercent)}%` }} /></div>
+                    </div>
+                );
+            })()}
+        </section>
     );
 }
 
