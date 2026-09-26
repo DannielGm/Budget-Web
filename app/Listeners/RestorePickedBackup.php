@@ -2,8 +2,8 @@
 
 namespace App\Listeners;
 
+use App\Services\BackupImportResult;
 use App\Services\BackupService;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Smronju\NativephpDocumentPicker\Events\DocumentPicked;
 use Throwable;
@@ -14,15 +14,15 @@ use Throwable;
  * The picker is fire-and-forget: `DocumentPicker::pick()` returns as soon as the
  * dialog opens, and the chosen file arrives here — in a request of its own, with
  * no page attached to it, after the response the page was waiting on has already
- * gone out. The outcome is therefore parked in the cache for the Settings page
- * to poll (`backup.status`) instead of being carried by a response.
+ * gone out. The outcome is therefore parked for the Settings page to read back
+ * (see BackupImportResult) instead of being carried by a response.
  */
 class RestorePickedBackup
 {
-    /** Cache key the outcome is parked under, polled by the Settings page. */
-    public const STATUS_KEY = 'backup.import.result';
-
-    public function __construct(protected BackupService $backup) {}
+    public function __construct(
+        protected BackupService $backup,
+        protected BackupImportResult $results,
+    ) {}
 
     public function handle(DocumentPicked $event): void
     {
@@ -32,28 +32,23 @@ class RestorePickedBackup
         // from here is the same thing: nothing to read. Either way the page has
         // to be told, or it would keep waiting for a file that is never coming.
         if ($event->path === null || ! is_file($event->path)) {
-            $this->record('cancelled', 'No se seleccionó ningún archivo.', $file);
+            $this->results->record('cancelled', 'No se seleccionó ningún archivo.', $file);
 
             return;
         }
 
         try {
-            $summary = $this->backup->importJson((string) file_get_contents($event->path));
-
-            $this->record('ok', sprintf(
-                'Respaldo restaurado: %d %s y %d registros.',
-                $summary['months'],
-                $summary['months'] === 1 ? 'mes' : 'meses',
-                $summary['rows'],
-            ), $file, $summary);
+            $this->results->recordSuccess(
+                $this->backup->importJson((string) file_get_contents($event->path)),
+                $file,
+            );
         } catch (Throwable $e) {
             report($e);
 
             // The device has no log the user can read, so the reason has to
             // reach the screen or it is lost.
-            $this->record(
-                'error',
-                'No se pudo restaurar el respaldo: '.Str::limit($e->getMessage(), 160),
+            $this->results->recordFailure(
+                'No se pudo restaurar el respaldo: '.$e->getMessage(),
                 $file,
             );
         }
@@ -70,18 +65,5 @@ class RestorePickedBackup
         }
 
         return Str::limit(basename(str_replace('\\', '/', $name)), 80);
-    }
-
-    /**
-     * @param  array<string, mixed>  $summary
-     */
-    private function record(string $status, string $message, ?string $file, array $summary = []): void
-    {
-        Cache::put(self::STATUS_KEY, [
-            'status' => $status,
-            'message' => $message,
-            'file' => $file,
-            'at' => now()->toIso8601String(),
-        ] + $summary, now()->addMinutes(30));
     }
 }

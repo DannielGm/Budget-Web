@@ -38,5 +38,9 @@
     "assets": { "android": [], "ios": [] },
     "secrets": [],
     "events": [],
+    "hooks": {
+        "post_compile": "bkeeper:patch-android-bridge"
+    },
+
     "service_provider": "BudgetWeb\\NativePHPRemoteDesktop\\RemoteDesktopServiceProvider"
 }

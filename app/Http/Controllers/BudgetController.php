@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Budget;
+use App\Services\BackupImportResult;
+use App\Services\BackupTransports;
 use App\Services\BudgetService;
 use App\Services\ExchangeRateService;
 use Carbon\CarbonImmutable;
@@ -157,7 +159,7 @@ class BudgetController extends Controller
         ]);
     }
 
-    public function settings(): Response
+    public function settings(BackupImportResult $pickResult): Response
     {
         $budgets = Budget::orderBy('month_id', 'desc')->get();
         $months = $budgets->map(fn (Budget $b) => [
@@ -165,15 +167,38 @@ class BudgetController extends Controller
             'month_label' => $b->month_label,
         ]);
 
+        // Which backup transports this build can reach. Probed here rather
+        // than shared globally: it costs a bridge round-trip on a device and
+        // only this page ever asks.
+        //
+        // The transport lists are derived from that same probe, so the page and
+        // the export route read one table instead of each re-deriving the rule
+        // and disagreeing about what this build supports.
+        $capabilities = NativeCapabilities::detect();
+        $transports = new BackupTransports($capabilities);
+
+        // The picked import finished in a request of its own, with no page
+        // attached to it, so the outcome could not ride back on a response the
+        // page was waiting for. Instead it is delivered here: whoever opens the
+        // Settings page next finds the result already rendered. That replaced a
+        // 20-second poll, which reported failure for a restore that was about to
+        // succeed whenever the user took longer than that to choose a file.
+        $pickedImport = $pickResult->toNotice();
+
+        // Shown once. Left in place it would greet the user with the same
+        // "restored 3 months" message on every visit for the next half hour.
+        if ($pickedImport !== null) {
+            $pickResult->forget();
+        }
+
         return Inertia::render('Settings', [
             'months' => $months,
             'monthIds' => $months->pluck('month_id'),
             'version' => config('budget.version'),
-
-            // Which backup transports this build can reach. Probed here rather
-            // than shared globally: it costs a bridge round-trip on a device and
-            // only this page ever asks.
-            'native' => NativeCapabilities::detect(),
+            'native' => $capabilities,
+            'exportActions' => $transports->exportActions(),
+            'importActions' => $transports->importActions(),
+            'pickedImport' => $pickedImport,
         ]);
     }
 

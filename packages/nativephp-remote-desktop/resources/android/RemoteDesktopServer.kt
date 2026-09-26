@@ -11,6 +11,7 @@ import java.io.BufferedOutputStream
 import java.io.File
 import java.net.ServerSocket
 import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -19,11 +20,30 @@ import java.util.concurrent.atomic.AtomicBoolean
 object RemoteDesktopServer {
     private val running = AtomicBoolean(false)
     private var serverSocket: ServerSocket? = null
-    private var token = ""
+    private var tokenHash: ByteArray = ByteArray(0)
+    private var displayToken = ""
     private var expiresAt = 0L
     private var port = 8080
-    private val sessions = ConcurrentHashMap.newKeySet<String>()
+    private var activeSession: String? = null
     private val random = SecureRandom()
+
+    // Rate limiting: IP -> Pair(failedCount, lockoutUntilTimestamp)
+    private val failedAttempts = ConcurrentHashMap<String, Pair<Int, Long>>()
+
+    /**
+     * The app's own origin, in either of the two forms it reaches us in.
+     *
+     * Plain HTML carries `http://127.0.0.1`, but Laravel's `data-page` payload is
+     * JSON with escaped slashes, so the bytes on the wire read
+     * `http:\/\/127.0.0.1\/`. A literal match on the unescaped form misses those
+     * entirely, leaving asset URLs pointing at the *client's* own loopback, where
+     * nothing is listening -- the browser then loads no script and the page
+     * renders as a white screen.
+     *
+     * The `\\?/` in the pattern is an optional backslash before each slash, so one
+     * expression covers `http://`, `http:\/\/`, and both https variants.
+     */
+    private val REHOST_ORIGIN = Regex("""(https?:)(\\?/\\?/)127\.0\.0\.1""")
 
     fun start(context: Context, requestedPort: Int, pairingToken: String, ttlSeconds: Long): Map<String, Any> {
         stop()
@@ -35,10 +55,14 @@ object RemoteDesktopServer {
         } catch (_: Exception) {
             return mapOf("status" to "error", "message" to "No se pudo abrir el puerto $requested.")
         }
-        token = pairingToken
+        displayToken = pairingToken.trim().uppercase(Locale.US)
+        tokenHash = MessageDigest.getInstance("SHA-256")
+            .digest(displayToken.toByteArray(StandardCharsets.UTF_8))
         port = socket.localPort
         expiresAt = System.currentTimeMillis() + ttlSeconds * 1000
         serverSocket = socket
+        activeSession = null
+        failedAttempts.clear()
         running.set(true)
         Thread({ acceptLoop(context.applicationContext, socket) }, "remote-desktop-accept").apply { isDaemon = true; start() }
         Thread({
@@ -51,9 +75,11 @@ object RemoteDesktopServer {
     fun stop(): Map<String, Any> {
         if (running.getAndSet(false)) try { serverSocket?.close() } catch (_: Exception) {}
         serverSocket = null
-        sessions.clear()
-        token = ""
+        activeSession = null
+        tokenHash = ByteArray(0)
+        displayToken = ""
         expiresAt = 0
+        failedAttempts.clear()
         return mapOf("active" to false)
     }
 
@@ -61,7 +87,7 @@ object RemoteDesktopServer {
         if (!running.get()) return mapOf("active" to false)
         val ip = context?.let { wifiAddress(it) } ?: "127.0.0.1"
         return mapOf(
-            "active" to true, "ip" to ip, "port" to port, "token" to token,
+            "active" to true, "ip" to ip, "port" to port, "token" to displayToken,
             "url" to "http://$ip:$port", "expires_at" to expiresAt / 1000,
         )
     }
@@ -94,6 +120,15 @@ object RemoteDesktopServer {
             client.soTimeout = 15_000
             val input = BufferedInputStream(client.getInputStream())
             val output = BufferedOutputStream(client.getOutputStream())
+            val clientIp = client.inetAddress?.hostAddress ?: "unknown"
+
+            // 1. Strict Expiry check on every incoming connection
+            if (System.currentTimeMillis() >= expiresAt) {
+                stop()
+                writeResponse(output, 410, mapOf("Content-Type" to "text/plain; charset=utf-8"), "La conexión expiró.")
+                return
+            }
+
             val requestLine = readAsciiLine(input)?.takeIf { it.isNotBlank() } ?: return
             val parts = requestLine.split(' ', limit = 3)
             if (parts.size < 2) return
@@ -113,30 +148,39 @@ object RemoteDesktopServer {
             val cookie = headers["Cookie"].orEmpty().split(';').map { it.trim() }
                 .firstOrNull { it.startsWith("remote_desktop=") }?.substringAfter('=')
 
-            if (!isPaired(cookie)) {
-                if (method == "POST" && path == "/remote-desktop/pair" && pairFrom(body) == token) {
-                    val session = randomSession()
-                    sessions.add(session)
-                    writeResponse(output, 303, mapOf(
-                        "Location" to "/",
-                        "Set-Cookie" to "remote_desktop=$session; Path=/; HttpOnly; SameSite=Lax; Max-Age=900",
-                        "Content-Type" to "text/html; charset=utf-8",
-                    ), "Conectado")
-                } else {
-                    writeResponse(output, 200, mapOf("Content-Type" to "text/html; charset=utf-8"), pairingPage(method == "POST"))
-                }
-                return
-            }
-            if (System.currentTimeMillis() >= expiresAt) {
-                stop()
-                writeResponse(output, 410, mapOf("Content-Type" to "text/plain; charset=utf-8"), "La conexión expiró.")
-                return
-            }
-            // Management endpoints and the pairing token are phone-only. The
-            // phone UI reaches them directly through its WebView, never through
-            // this LAN listener, so reject them from every remote client.
-            if (path == "/remote-desktop" || path.startsWith("/remote-desktop/")) {
+            // 2. Shield phone-only management endpoints from remote LAN clients
+            if (path == "/remote-desktop" || (path.startsWith("/remote-desktop/") && path != "/remote-desktop/pair") || path == "/backup/import/pick") {
                 writeResponse(output, 404, mapOf("Content-Type" to "text/plain; charset=utf-8"), "No encontrado.")
+                return
+            }
+
+            // 3. Pairing and Rate Limiting
+            if (!isPaired(cookie)) {
+                if (method == "POST" && path == "/remote-desktop/pair") {
+                    if (isRateLimited(clientIp)) {
+                        writeResponse(output, 429, mapOf("Content-Type" to "text/html; charset=utf-8"),
+                            errorPage("Demasiados intentos fallidos", "Espera 15 minutos antes de volver a intentar conectar."))
+                        return
+                    }
+
+                    val candidateCode = pairFrom(body)
+                    if (candidateCode != null && verifyToken(candidateCode)) {
+                        clearFailedAttempts(clientIp)
+                        val session = randomSession()
+                        // Enforce single active session: revokes any previous paired client
+                        activeSession = session
+                        writeResponse(output, 303, mapOf(
+                            "Location" to "/",
+                            "Set-Cookie" to "remote_desktop=$session; Path=/; HttpOnly; SameSite=Lax; Max-Age=900",
+                            "Content-Type" to "text/html; charset=utf-8",
+                        ), "Conectado")
+                    } else {
+                        recordFailedAttempt(clientIp)
+                        writeResponse(output, 200, mapOf("Content-Type" to "text/html; charset=utf-8"), pairingPage(true))
+                    }
+                } else {
+                    writeResponse(output, 200, mapOf("Content-Type" to "text/html; charset=utf-8"), pairingPage(false))
+                }
                 return
             }
 
@@ -153,11 +197,12 @@ object RemoteDesktopServer {
             phpHeaders["Host"] = "$ip:$port"
             phpHeaders["X-Forwarded-Host"] = "$ip:$port"
             phpHeaders["X-Forwarded-Proto"] = "http"
+            phpHeaders["X-Forwarded-For"] = clientIp
+            phpHeaders["X-Remote-Desktop-Origin"] = origin
+
             val request = PHPRequest(path, method, body, phpHeaders, queryString = query)
             val raw = activity.phpBridge.handleLaravelRequest(request, headers["Cookie"].orEmpty())
             if (raw.isBlank()) {
-                // A blank upstream response used to reach the browser as a white
-                // page; surface it instead so the failure is diagnosable.
                 writeResponse(output, 502, mapOf("Content-Type" to "text/html; charset=utf-8"),
                     errorPage("El servidor no devolvió una respuesta", "$method $path"))
             } else {
@@ -171,7 +216,38 @@ object RemoteDesktopServer {
 
     private fun isPaired(cookie: String?): Boolean {
         val session = cookie?.removePrefix("remote_desktop=")?.takeIf { it.isNotBlank() } ?: return false
-        return sessions.contains(session)
+        val active = activeSession ?: return false
+        return session == active
+    }
+
+    private fun verifyToken(candidate: String): Boolean {
+        if (tokenHash.isEmpty() || candidate.isBlank()) return false
+        val normalized = candidate.trim().uppercase(Locale.US)
+        val candidateHash = MessageDigest.getInstance("SHA-256")
+            .digest(normalized.toByteArray(StandardCharsets.UTF_8))
+        return MessageDigest.isEqual(tokenHash, candidateHash)
+    }
+
+    private fun isRateLimited(ip: String): Boolean {
+        val now = System.currentTimeMillis()
+        val record = failedAttempts[ip] ?: return false
+        if (now < record.second) return true
+        if (now >= record.second && record.first >= 5) {
+            failedAttempts.remove(ip)
+        }
+        return false
+    }
+
+    private fun recordFailedAttempt(ip: String) {
+        val now = System.currentTimeMillis()
+        val current = failedAttempts[ip]?.first ?: 0
+        val count = current + 1
+        val lockout = if (count >= 5) now + 15 * 60 * 1000L else 0L
+        failedAttempts[ip] = Pair(count, lockout)
+    }
+
+    private fun clearFailedAttempts(ip: String) {
+        failedAttempts.remove(ip)
     }
 
     private fun pairFrom(body: String): String? =
@@ -182,7 +258,14 @@ object RemoteDesktopServer {
         android.util.Base64.encodeToString(ByteArray(24).also { random.nextBytes(it) }, android.util.Base64.NO_WRAP or android.util.Base64.NO_PADDING)
 
     private fun serveStatic(publicRoot: String, path: String, output: BufferedOutputStream): Boolean {
-        val relative = path.removePrefix("/").substringBefore('?')
+        var relative = path.removePrefix("/").substringBefore('?')
+        // ASSET_URL points at a VIRTUAL mount (http://127.0.0.1/_assets/), not a
+        // real directory — the bytes live under the Laravel public root, e.g.
+        // public/build/assets/app-xxx.css. Without stripping the prefix, every
+        // candidate below misses and Laravel answers a 404 page as text/css.
+        if (relative.startsWith("_assets/")) {
+            relative = relative.removePrefix("_assets/")
+        }
         if (relative.isBlank() || relative.contains("..")) return false
         val root = File(publicRoot).canonicalFile
         // Mirror the phone WebView's resolution: the requested path first, then
@@ -219,14 +302,14 @@ object RemoteDesktopServer {
         return true
     }
 
-    private fun pairingPage(submitted: Boolean): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto · BKeeper</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(360px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:22px;margin:0 0 8px}p{color:#9ca3af;line-height:1.5}label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 8px;color:#9ca3af}input,button{box-sizing:border-box;width:100%;border-radius:12px;padding:13px;font:inherit}input{background:#0d0d12;border:1px solid #374151;color:white;letter-spacing:.12em;text-transform:uppercase}button{margin-top:12px;background:#9b7bff;color:white;border:0;font-weight:700}.err{color:#fca5a5;font-size:13px}</style><div class="card"><h1>Escritorio remoto</h1><p>Introduce el código temporal que aparece en BKeeper.</p><form method="post" action="/remote-desktop/pair"><label>Código de acceso</label><input name="code" required autofocus autocomplete="one-time-code" inputmode="text" pattern="[A-Za-z0-9-]{6,20}">${if (submitted) "<p class=err>El código no coincide o venció.</p>" else ""}<button>Conectar</button></form><p>La conexión se cerrará automáticamente después de 15 minutos.</p></div></html>"""
+    private fun pairingPage(submitted: Boolean): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto · BKeeper</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(360px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:22px;margin:0 0 8px}p{color:#9ca3af;line-height:1.5}label{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:24px 0 8px;color:#9ca3af}input,button{box-sizing:border-box;width:100%;border-radius:12px;padding:13px;font:inherit}input{background:#0d0d12;border:1px solid #374151;color:white;letter-spacing:.12em;text-transform:uppercase}button{margin-top:12px;background:#9b7bff;color:white;border:0;font-weight:700;cursor:pointer}.err{color:#fca5a5;font-size:13px;margin-top:8px}</style><div class="card"><h1>Escritorio remoto</h1><p>Introduce el código temporal que aparece en BKeeper.</p><form method="post" action="/remote-desktop/pair"><label>Código de acceso</label><input name="code" required autofocus autocomplete="one-time-code" inputmode="text" pattern="[A-Za-z0-9-]{4,24}">${if (submitted) "<p class=err>El código no coincide o venció.</p>" else ""}<button type="submit">Conectar</button></form><p style="margin-top:20px;font-size:12px;color:#6b7280">La conexión se cerrará automáticamente después de 15 minutos.</p></div></html>"""
 
-    private fun errorPage(title: String, detail: String): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(420px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:20px;margin:0 0 10px}p{color:#9ca3af;line-height:1.6}code{display:block;margin-top:12px;background:#0d0d12;border:1px solid #374151;border-radius:10px;padding:10px;font-size:12px;color:#fca5a5;word-break:break-all}</style><div class="card"><h1>$title</h1><p>Cierra BKeeper en el teléfono y vuelve a activar el escritorio remoto.</p><code>${detail.replace("&", "&amp;").replace("<", "&lt;")}</code></div></html>"""
+    private fun errorPage(title: String, detail: String): String = """<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Escritorio remoto</title><style>body{font:16px system-ui;background:#0d0d12;color:#f8fafc;display:grid;min-height:100vh;margin:0;place-items:center}.card{width:min(420px,calc(100% - 32px));background:#1a1a2e;border:1px solid #2d2d44;border-radius:20px;padding:28px;box-sizing:border-box}h1{font-size:20px;margin:0 0 10px}p{color:#9ca3af;line-height:1.6}code{display:block;margin-top:12px;background:#0d0d12;border:1px solid #374151;border-radius:10px;padding:10px;font-size:12px;color:#fca5a5;word-break:break-all}</style><div class="card"><h1>$title</h1><p>Vuelve a activar el escritorio remoto en el teléfono.</p><code>${detail.replace("&", "&amp;").replace("<", "&lt;")}</code></div></html>"""
 
     private fun statusReason(status: Int): String = when (status) {
         200 -> "OK"; 303 -> "See Other"; 400 -> "Bad Request"
-        404 -> "Not Found"; 410 -> "Gone"; 502 -> "Bad Gateway"
-        503 -> "Service Unavailable"; else -> "OK"
+        404 -> "Not Found"; 410 -> "Gone"; 429 -> "Too Many Requests"
+        502 -> "Bad Gateway"; 503 -> "Service Unavailable"; else -> "OK"
     }
 
     private fun writeResponse(out: BufferedOutputStream, status: Int, headers: Map<String, String>, body: String) {
@@ -244,9 +327,18 @@ object RemoteDesktopServer {
         val index = raw.indexOf(separator)
         val head = if (index >= 0) raw.substring(0, index) else ""
         var body = if (index >= 0) raw.substring(index + separator.length) else raw
+
+        // Re-host the app's own origin as a safety net fallback.
+        fun rehost(text: String) = text
+            .replace("https://127.0.0.1/_assets/", "$origin/_assets/")
+            .replace("http://127.0.0.1/_assets/", "$origin/_assets/")
+            .replace(REHOST_ORIGIN, origin)
+            .replace("http://127.0.0.1", origin)
+            .replace("https://127.0.0.1", origin)
+        body = rehost(body)
+        // CRUCIAL FIX: bodyBytes MUST be converted AFTER rehost(body) so rewritten bytes are sent!
         val bodyBytes = body.toByteArray(StandardCharsets.UTF_8)
 
-        // processRawPHPResponse() can hand back a bare body with no head at all.
         var lines = head.lines().filter { line ->
             val name = line.substringBefore(':', "")
             !name.equals("Content-Length", true) && !name.equals("Transfer-Encoding", true)
@@ -258,24 +350,15 @@ object RemoteDesktopServer {
             lines = lines + listOf("Content-Type: text/html; charset=utf-8")
         }
 
-        // Rewrite loopback origins and re-host cookies for the LAN client so the
-        // computer's browser holds a valid Laravel session for the LAN host.
-        body = body
-            .replace("https://127.0.0.1", origin)
-            .replace("http://127.0.0.1", origin)
         lines = lines.map { line ->
             when {
                 line.startsWith("Location:", true) ->
-                    "Location: " + line.substringAfter(':').trim()
-                        .replace("https://127.0.0.1", origin)
-                        .replace("http://127.0.0.1", origin)
+                    "Location: " + rehost(line.substringAfter(':').trim())
                 line.startsWith("Set-Cookie:", true) -> {
-                    val cleaned = line.substringAfter(':').trim()
-                        .replace("https://127.0.0.1", origin)
-                        .replace("http://127.0.0.1", origin)
+                    val cleaned = rehost(line.substringAfter(':').trim())
                         .replace(Regex(";\\s*Domain=[^;]*", RegexOption.IGNORE_CASE), "")
                         .replace(Regex(";\\s*Secure", RegexOption.IGNORE_CASE), "")
-                    cleaned
+                    "Set-Cookie: $cleaned"
                 }
                 else -> line
             }

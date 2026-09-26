@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers;
 
-use App\Listeners\RestorePickedBackup;
+use App\Services\BackupImportResult;
 use App\Services\BackupService;
+use App\Services\BackupTransports;
+use App\Support\NativeBridge;
 use App\Support\NativeCapabilities;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Native\Mobile\Facades\Share;
-use Smronju\NativephpDocumentPicker\Facades\DocumentPicker;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Throwable;
 
@@ -42,27 +41,46 @@ class ExportController extends Controller
      * while this request is still open and answered long after it returned,
      * which is why the page is only told that the handoff started.
      */
-    public function exportNative(Request $request, BackupService $backup)
+    public function exportNative(Request $request, BackupService $backup, NativeBridge $bridge)
     {
         $validated = $request->validate([
             'mode' => 'nullable|in:save,share',
         ]);
 
         $mode = $validated['mode'] ?? 'save';
-        $capabilities = NativeCapabilities::detect();
+        $transports = new BackupTransports();
 
-        if ($mode === 'share' ? ! $capabilities['canShare'] : ! $capabilities['canSave']) {
+        // Same table the page was given, so the request can no longer be refused
+        // for a capability the page already knew it had. The client is not a
+        // trust boundary — this request can be sent without the page — but both
+        // sides now read one source of truth instead of re-deriving the rule.
+        if (! $transports->supports($transports->exportActions(), $mode)) {
             return back()->withErrors([
-                'backup' => 'Esta versión de la app no puede abrir el selector de archivos del sistema.',
+                'backup' => $transports->reasonFor($transports->exportActions(), $mode)
+                    ?? 'Este método de respaldo no está disponible en esta compilación.',
             ]);
         }
 
         $file = $backup->writeBackupFile($backup->exportPayload());
 
-        if ($mode === 'share') {
-            Share::file('BKeeper', 'Respaldo de BKeeper', $file['path']);
-        } else {
-            DocumentPicker::save($file['path'], $file['filename'], 'application/json');
+        $response = $mode === 'share'
+            ? $bridge->call('Share.File', [
+                'title' => 'BKeeper',
+                'message' => 'Respaldo de BKeeper',
+                'filePath' => $file['path'],
+            ])
+            : $bridge->call('DocumentPicker.Save', [
+                'source_path' => $file['path'],
+                'suggested_name' => $file['filename'],
+                'mime_type' => 'application/json',
+            ]);
+
+        // Every bridge function reports failure in its own shape (see
+        // NativeBridge::failed), and the vendor facades swallow a missing bridge
+        // entirely — so without this the page would claim the handoff started
+        // while no dialog was ever shown.
+        if ($message = $bridge->errorMessage($response, 'No se pudo abrir el selector de archivos del sistema.')) {
+            return back()->withErrors(['backup' => $message]);
         }
 
         return back()->with('backup_export', [
@@ -127,21 +145,33 @@ class ExportController extends Controller
      * chosen file lands in the listener (see RestorePickedBackup), and the page
      * follows that by polling status().
      */
-    public function pickImportFile()
+    public function pickImportFile(NativeBridge $bridge, BackupImportResult $results)
     {
-        if (! NativeCapabilities::detect()['canPick']) {
+        $transports = new BackupTransports();
+
+        if (! $transports->supports($transports->importActions(), 'pick')) {
             return back()->withErrors([
-                'file' => 'Esta versión de la app no puede abrir el explorador de archivos. Pega el contenido del respaldo.',
+                'file' => $transports->reasonFor($transports->importActions(), 'pick')
+                    ?? 'Esta versión de la app no puede abrir el explorador de archivos.',
             ]);
         }
 
-        // Clear the previous outcome first: the page compares timestamps, but a
-        // stale entry is still what a fast first poll would read.
-        Cache::forget(RestorePickedBackup::STATUS_KEY);
+        // Clear the previous outcome first: a stale entry is what a fast read
+        // after this request would otherwise pick up.
+        $results->forget();
 
         // The three types a downloaded .json can legitimately arrive as — some
         // providers report a JSON file as plain text or an octet stream.
-        DocumentPicker::pick(['application/json', 'text/plain', 'application/octet-stream']);
+        $response = $bridge->call('DocumentPicker.Pick', [
+            'mime_types' => ['application/json', 'text/plain', 'application/octet-stream'],
+        ]);
+
+        // A build whose registry has no such function answers null, which the
+        // bridge reports as a failure. Without this the page would fall into its
+        // 20-second poll waiting for a dialog that was never shown.
+        if ($message = $bridge->errorMessage($response, 'No se pudo abrir el explorador de archivos.')) {
+            return back()->withErrors(['file' => $message]);
+        }
 
         return back();
     }
@@ -151,12 +181,13 @@ class ExportController extends Controller
      *
      * The picker's event is handled in a request of its own with no page
      * attached to it, so this endpoint is how the Settings page learns what
-     * happened to the file the user chose.
+     * happened to the file the user chose. The result is session-scoped, so it
+     * is only ever visible to the session that asked for the pick.
      */
-    public function status()
+    public function status(BackupImportResult $results)
     {
         return response()->json([
-            'result' => Cache::get(RestorePickedBackup::STATUS_KEY),
+            'result' => $results->read(),
             'capabilities' => NativeCapabilities::detect(),
         ]);
     }

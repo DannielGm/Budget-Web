@@ -12,12 +12,18 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Remote desktop rebinds the origin itself (HandleRemoteDesktopOrigin
+        // uses URL::useOrigin/useAssetOrigin), so no trustProxies() is needed.
+        // Trusting '*' would let X-Forwarded-* from any peer rewrite the
+        // origin, which is a wider door than this feature requires.
+        $middleware->web(prepend: [
+            \App\Http\Middleware\HandleRemoteDesktopOrigin::class,
+        ]);
+
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
         ]);
-
-        //
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

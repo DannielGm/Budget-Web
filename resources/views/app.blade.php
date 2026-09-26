@@ -4,6 +4,13 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+        <!-- The CSRF token for the one form in this app the browser submits
+             natively. Every other request goes through Inertia, which reads the
+             XSRF-TOKEN cookie and never needs this. The backup file input is
+             the exception: a file upload has to be a real form post, so it
+             carries its own token. -->
+        <meta name="csrf-token" content="{{ csrf_token() }}">
+
         <title inertia>{{ config('app.name', 'Laravel') }}</title>
 
         <!-- Fonts -->
