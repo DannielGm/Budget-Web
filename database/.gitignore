@@ -1,1 +1,5 @@
 *.sqlite*
+
+# Real financial exports. These are data, not fixtures: never commit them.
+/data/*.json
+/data/
