@@ -18,9 +18,14 @@ const RANGES = [
 
 const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
+const TODAY = new Date().toISOString().slice(0, 10);
+
 const shortDate = (iso) => {
     const d = new Date(`${iso}T12:00:00`);
-    return `${String(d.getDate()).padStart(2, '0')} ${MONTH_SHORT[d.getMonth()]}`;
+    const base = `${String(d.getDate()).padStart(2, '0')} ${MONTH_SHORT[d.getMonth()]}`;
+    // Only pay for the year when it is not the current one, so rows stay
+    // compact while a year boundary remains unambiguous.
+    return d.getFullYear() === new Date().getFullYear() ? base : `${base} ${d.getFullYear()}`;
 };
 const longDate = (iso) => {
     const d = new Date(`${iso}T12:00:00`);
@@ -39,18 +44,28 @@ export default function RateHistoryDashboard({
     const data = points || [];
     const last = data.length > 0 ? data[data.length - 1] : null;
 
-    // 1D / 7D / 30D movement against the last point (points are consecutive days).
+    // 1D / 7D / 30D movement against the last point (points are consecutive
+    // days). 30D is the headline figure the hero must always carry, so it
+    // falls back to the oldest available point when the selected range is
+    // shorter than a month (the default 1M view), and is simply omitted only
+    // when there is too little history to compare at all.
     const deltas = useMemo(() => {
-        if (data.length < 8 || !last) return [];
+        if (!last || data.length < 2) return [];
         const cur = parseFloat(last.rate);
         const mk = (days, label) => {
-            const back = data[data.length - 1 - days];
-            if (!back) return null;
-            const prev = parseFloat(back.rate);
+            const idx = data.length - 1 - days;
+            const point = idx >= 0 ? data[idx] : data[0];
+            if (!point) return null;
+            const prev = parseFloat(point.rate);
             if (!prev) return null;
-            return { label, pct: ((cur - prev) / prev) * 100 };
+            return { label, pct: ((cur - prev) / prev) * 100, partial: idx < 0 };
         };
-        return [mk(1, '1D'), mk(7, '7D'), data.length > 31 ? mk(30, '30D') : null].filter(Boolean);
+        const out = [];
+        if (data.length >= 2) out.push(mk(1, '1D'));
+        if (data.length >= 8) out.push(mk(7, '7D'));
+        const m = mk(30, '30D');
+        if (m) out.push(m);
+        return out;
     }, [points]);
 
     const stats = useMemo(() => {
@@ -84,7 +99,7 @@ export default function RateHistoryDashboard({
                 <div className="absolute -right-8 -top-10 w-36 h-36 rounded-full bg-white/5" />
                 <div className="absolute -right-2 top-16 w-20 h-20 rounded-full bg-white/5" />
 
-                <div className="flex justify-between items-start mb-3 relative z-10">
+                <div className="flex justify-between items-center mb-1.5 relative z-10">
                     <div className="flex items-center gap-2">
                         <span className="text-white/70 text-[10px] font-black uppercase tracking-[0.2em]">BCV Oficial</span>
                         {(rate?.stale || rate?.error) && (
@@ -114,22 +129,29 @@ export default function RateHistoryDashboard({
                 </div>
 
                 {deltas.length > 0 && (
-                    <div className="flex gap-2 mt-4 relative z-10">
-                        {deltas.map(({ label, pct }) => {
-                            const up = pct >= 0;
-                            return (
-                                <span
-                                    key={label}
-                                    className={cn(
-                                        'flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider tabular',
-                                        up ? 'text-green-400' : 'text-red-400',
-                                    )}
-                                >
-                                    {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
-                                    {label} {up ? '+' : ''}{fmtPct(pct)}%
-                                </span>
-                            );
-                        })}
+                    <div className="mt-4">
+                        <div className="flex gap-2 relative z-10">
+                            {deltas.map(({ label, pct, partial }) => {
+                                const up = pct >= 0;
+                                return (
+                                    <span
+                                        key={label}
+                                        className={cn(
+                                            'flex items-center gap-1 bg-white/10 rounded-lg px-2 py-1 text-[10px] font-black uppercase tracking-wider tabular',
+                                            up ? 'text-green-400' : 'text-red-400',
+                                        )}
+                                    >
+                                        {up ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                                        {label} {up ? '+' : ''}{fmtPct(pct)}%{partial ? '*' : ''}
+                                    </span>
+                                );
+                            })}
+                        </div>
+                        {deltas.some((d) => d.partial) && (
+                            <p className="mt-1.5 text-[9px] text-white/40 relative z-10">
+                                * 30D calculado con el historial disponible
+                            </p>
+                        )}
                     </div>
                 )}
             </div>
@@ -220,25 +242,36 @@ export default function RateHistoryDashboard({
             {/* Daily history */}
             {!loading && !error && data.length > 0 && (
                 <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4">
-                    <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400 mb-3">Historial diario</h4>
+                    <h4 className="font-bold text-sm uppercase tracking-widest text-gray-400 mb-3">Historial</h4>
                     <div>
                         {reversed.slice(0, visibleRows).map((p, idx) => {
                             const chronoIdx = data.length - 1 - idx;
                             const prev = chronoIdx > 0 ? parseFloat(data[chronoIdx - 1].rate) : null;
                             const cur = parseFloat(p.rate);
                             const diff = prev !== null ? cur - prev : 0;
+                            const isFuture = p.date > TODAY;
                             return (
                                 <div
                                     key={p.date}
-                                    className="flex justify-between items-center py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0"
+                                    className={cn(
+                                        'flex justify-between items-center py-1.5 border-b last:border-0',
+                                        isFuture
+                                            ? 'border-blue-100 dark:border-blue-900/40 bg-blue-50/50 dark:bg-blue-950/20'
+                                            : 'border-gray-50 dark:border-gray-800',
+                                    )}
                                 >
                                     <span
                                         className={cn(
                                             'text-xs font-medium tabular',
-                                            p.exact ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-600',
+                                            isFuture
+                                                ? 'text-blue-600 dark:text-blue-300'
+                                                : p.exact
+                                                    ? 'text-gray-500 dark:text-gray-400'
+                                                    : 'text-gray-400 dark:text-gray-600',
                                         )}
                                     >
                                         {p.exact ? '' : '≈ '}{shortDate(p.date)}
+                                        {isFuture && <span className="ml-1 text-[9px] font-black uppercase">fut</span>}
                                     </span>
                                     <div className="flex items-center gap-3">
                                         <span
@@ -285,7 +318,7 @@ export default function RateHistoryDashboard({
 function RateChart({ points }) {
     const W = 600;
     const H = 190;
-    const PAD = { t: 16, r: 46, b: 24, l: 6 };
+    const PAD = { t: 18, r: 74, b: 30, l: 6 };
     const [hover, setHover] = useState(null);
 
     const geom = useMemo(() => {
@@ -354,7 +387,7 @@ function RateChart({ points }) {
                             stroke="var(--hairline)" strokeWidth="1" strokeDasharray="2 4"
                         />
                         <text
-                            x={W - PAD.r + 6} y={geom.y(v) + 3} fontSize="9" fontWeight="700"
+                            x={W - PAD.r + 6} y={geom.y(v) + 4.5} fontSize="14" fontWeight="700"
                             fill="var(--ink-3)" className="tabular"
                         >
                             {fmtRate(v)}
@@ -374,7 +407,7 @@ function RateChart({ points }) {
 
                 {geom.tickIdx.map((i) => (
                     <text
-                        key={i} x={geom.x(i)} y={H - 8} fontSize="9" fontWeight="700"
+                        key={i} x={geom.x(i)} y={H - 6} fontSize="14" fontWeight="700"
                         fill="var(--ink-3)"
                         textAnchor={i === 0 ? 'start' : i === points.length - 1 ? 'end' : 'middle'}
                     >

@@ -104,6 +104,27 @@
     }
 }
 
+/*
+ * "Análisis" staged reveal. One entrance for the whole screen: each card
+ * carries an inline animation-delay, so the panel builds top to bottom in
+ * 50ms steps instead of every bar animating on its own. The global
+ * prefers-reduced-motion block below neutralises this.
+ */
+@keyframes insights-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+[data-reveal='insights-reveal'] {
+    animation: insights-reveal 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

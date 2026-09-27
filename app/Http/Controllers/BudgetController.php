@@ -12,7 +12,9 @@ use App\Models\Category;
 use App\Models\Debt;
 use App\Models\ExchangeRate;
 use App\Models\Expense;
+use App\Models\DebtPayment;
 use App\Models\SavingTransaction;
+use App\Models\Transfer;
 use App\Support\NativeCapabilities;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,27 @@ class BudgetController extends Controller
     ) {}
 
     public function index(Request $request): Response
+    {
+        [$view, $props] = $this->budgetPayload($request, 'Dashboard');
+
+        return Inertia::render($view, $props);
+    }
+
+    /**
+     * "Análisis" renders the same payload as the dashboard under a different
+     * view name, so the two screens can never disagree about a figure.
+     */
+    public function insights(Request $request): Response
+    {
+        [$view, $props] = $this->budgetPayload($request, 'Insights');
+
+        return Inertia::render($view, $props);
+    }
+
+    /**
+     * @return array{0: string, 1: array}
+     */
+    private function budgetPayload(Request $request, string $view): array
     {
         $monthId = $this->parseMonth($request->query('month'));
         $dayIso = $this->parseDay($request->query('day'), $monthId);
@@ -62,7 +85,7 @@ class BudgetController extends Controller
             'total_savings_usd',
         ]);
 
-        return Inertia::render('Dashboard', [
+        return [$view, [
             'budget' => $budget,
             'savingsLedger' => fn () => $this->budgetService->savingsLedger($budget),
             'monthIds' => Budget::orderBy('month_id', 'desc')->pluck('month_id'),
@@ -73,7 +96,7 @@ class BudgetController extends Controller
             'today' => CarbonImmutable::today()->toDateString(),
             'currentMonthId' => CarbonImmutable::today()->format('Y-m'),
             'monthIdsHaveRates' => $rateSnapshot['updated_today'],
-        ]);
+        ]];
     }
 
     public function update(Request $request, Budget $budget)
@@ -125,6 +148,9 @@ class BudgetController extends Controller
      * carry the closest earlier rate (ExchangeRateService::rateSeries).
      * range: 30|90|180|365 days, or "all" (asks for the full public archive).
      */
+    /** Days after today the rate series is extended to, to surface forward-published BCV rates. */
+    private const RATE_SERIES_LOOKAHEAD_DAYS = 1;
+
     public function rateSeries(Request $request)
     {
         $validated = $request->validate([
@@ -132,7 +158,11 @@ class BudgetController extends Controller
         ]);
 
         $range = (string) ($validated['range'] ?? '180');
-        $to = CarbonImmutable::today()->toDateString();
+
+        // BCV occasionally publishes the rate for the next day(s) ahead of
+        // time. Carry the window a few days past today so those forward rates
+        // reach the dashboard instead of being cut off at today's date.
+        $to = CarbonImmutable::today()->addDays(self::RATE_SERIES_LOOKAHEAD_DAYS)->toDateString();
 
         if ($range === 'all') {
             // Ask the API for the complete archive (guarded to 1 attempt / 6h),
@@ -219,12 +249,24 @@ class BudgetController extends Controller
 
         $monthId = $validated['month_id'];
 
+        // Exchange rates are deliberately untouched: they are a global
+        // reference table, not month data, and the whole app depends on them.
         DB::transaction(function () use ($monthId) {
             Expense::where('month_id', $monthId)->delete();
             SavingTransaction::where('month_id', $monthId)->delete();
+            Transfer::where('month_id', $monthId)->delete();
+
+            // Children first so nothing relies on a foreign-key cascade.
+            DebtPayment::whereIn('debt_id', Debt::where('month_id', $monthId)->pluck('id'))->delete();
             Debt::where('month_id', $monthId)->delete();
-            Category::where('month_id', $monthId)->delete();
-            Budget::where('month_id', $monthId)->delete();
+
+            // Categories and the budget row survive, zeroed, so the month keeps
+            // its place in the list with its category structure intact.
+            Budget::where('month_id', $monthId)->update([
+                'income_bs' => 0,
+                'opening_balance_bs' => 0,
+                'is_custom_rate' => false,
+            ]);
         });
 
         return to_route('settings');
@@ -232,14 +274,39 @@ class BudgetController extends Controller
 
     public function clearAll()
     {
-        \Illuminate\Support\Facades\DB::transaction(function () {
-            \App\Models\DebtPayment::truncate();
-            \App\Models\SavingTransaction::truncate();
-            \App\Models\Expense::truncate();
-            \App\Models\Debt::truncate();
-            \App\Models\Category::truncate();
-            \App\Models\Budget::truncate();
+        // Exchange rates are deliberately untouched: they are a global
+        // reference table, not budget data, and the whole app depends on them.
+        //
+        // delete() rather than truncate(), which on SQLite resets AUTOINCREMENT
+        // and drops foreign-key enforcement for the duration of the statement.
+        // Children are removed before their parents so no cascade is relied on.
+        DB::transaction(function () {
+            Expense::query()->delete();
+            SavingTransaction::query()->delete();
+            Transfer::query()->delete();
+            DebtPayment::query()->delete();
+            Debt::query()->delete();
+            Category::query()->delete();
+            Budget::query()->delete();
         });
+
+        return to_route('dashboard');
+    }
+
+    /**
+     * Clear every movement recorded on one day, keeping the month itself,
+     * its categories and the global exchange-rate table intact.
+     */
+    public function clearDay(Request $request): RedirectResponse
+    {
+        $monthId = (string) $request->input('month_id', '');
+        $date = $this->parseDay($request->input('date'), $monthId);
+
+        if ($date === null) {
+            return back();
+        }
+
+        $this->budgetService->clearDay($monthId, $date);
 
         return to_route('dashboard');
     }

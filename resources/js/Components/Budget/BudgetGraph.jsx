@@ -45,9 +45,13 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
 
     return (
         <section className="overflow-hidden rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900" aria-label="Flujo financiero del mes">
-            <div className="mb-4 flex items-start justify-between gap-3">
-                <div className="min-w-0"><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</p><p className="mt-1 truncate whitespace-nowrap text-2xl font-black font-serif tabular text-gray-900 dark:text-white">{isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p>{!isUsd && <p className="text-[10px] font-bold tabular text-gray-400">≈ ${fmtUsd(rate > 0 ? value / rate : 0)}</p>}</div>
-                <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${healthStyles}`}>{health}</span>
+            <div className="mb-4">
+                <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</p>
+                    <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${healthStyles}`}>{health}</span>
+                </div>
+                <p className="mt-1 text-2xl font-black font-serif tabular text-gray-900 dark:text-white">{isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p>
+                {!isUsd && <p className="text-[10px] font-bold tabular text-gray-400">≈ ${fmtUsd(rate > 0 ? value / rate : 0)}</p>}
             </div>
             <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800" role="tablist" aria-label="Métrica del gráfico">
                 {METRICS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={metric === item.id} onClick={() => { setMetric(item.id); setActiveIndex(null); }} className={`min-h-10 rounded-lg text-xs font-black uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF8A3D] dark:focus-visible:outline-[#9B7BFF] ${metric === item.id ? 'bg-white text-[#FF8A3D] shadow-sm dark:bg-gray-700 dark:text-[#9B7BFF]' : 'text-gray-500 dark:text-gray-400'}`}>{item.label}</button>)}

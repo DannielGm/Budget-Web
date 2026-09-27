@@ -1,10 +1,11 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import DashboardHeader from '@/Components/DashboardHeader';
 import { Head, usePage, router } from '@inertiajs/react';
-import React, { useState, useEffect, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import MonthSummaryStrip from '@/Components/Budget/MonthSummaryStrip';
+import { calculateCashExpenses } from '@/lib/budgetExpenses';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import DebtCard from '@/Components/Budget/DebtCard';
 
@@ -26,6 +27,8 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSwipeViews } from '@/hooks/useSwipeViews';
+import useHapticFeedback from '@/hooks/useHapticFeedback';
 
 const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
 const SavingsPoolSummaryModal = lazy(() => import('@/Components/Budget/SavingsPoolSummaryModal'));
@@ -92,6 +95,9 @@ export default function Dashboard() {
     } = usePage().props;
     const confirmAction = useConfirm();
 
+    // One delegated listener answers every .touch-feedback control in the app.
+    useHapticFeedback();
+
     const [isDark, setIsDark] = useState(() => {
         if (typeof window !== 'undefined') {
             return document.documentElement.classList.contains('dark');
@@ -137,7 +143,7 @@ export default function Dashboard() {
     const [rateSeriesByRange, setRateSeriesByRange] = useState({});
     const [rateLoading, setRateLoading] = useState(false);
     const [rateError, setRateError] = useState(null);
-    const [rateRange, setRateRange] = useState('180');
+    const [rateRange, setRateRange] = useState('30');
     const [refreshingRate, setRefreshingRate] = useState(false);
 
     const fetchRateSeries = async (range, force = false) => {
@@ -250,6 +256,10 @@ export default function Dashboard() {
 
     const visibleCategories = filteredCategories(budget, dateFilter, rangeDaysFor(rangeMode));
 
+    // Single definition of "Gastos" for the summary strip, shared with
+    // BalanceCard and the graph so the three surfaces cannot disagree.
+    const stripCashExpenses = calculateCashExpenses(budget, dateFilter);
+
     const selectedCategory = visibleCategories.find((c) => c.name === selectedCategoryName)
         ?? budget.categories.find((c) => c.name === selectedCategoryName);
 
@@ -303,27 +313,6 @@ export default function Dashboard() {
 
     const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuestoBs;
 
-    const clearSelectedDay = async () => {
-        if (!dateFilter) return;
-        const confirmed = await confirmAction({
-            title: 'Limpiar datos del día',
-            message: `Se eliminarán los gastos, deudas, pagos, ahorros y transferencias del ${dateFilter}.`,
-            detail: 'Esta acción no se puede deshacer.',
-            confirmLabel: 'Limpiar día',
-            tone: 'danger',
-        });
-        if (confirmed) router.post(route('settings.clear-day', budget.month_id), { date: dateFilter });
-    };
-    const clearCurrentMonth = async () => {
-        const confirmed = await confirmAction({
-            title: 'Limpiar mes actual',
-            message: `Se eliminarán todos los datos de ${budget.month_label}.`,
-            detail: 'Esta acción no se puede deshacer.',
-            confirmLabel: 'Limpiar mes',
-            tone: 'danger',
-        });
-        if (confirmed) router.post(route('settings.clear-month', budget.month_id));
-    };
     const seedMockData = async () => {
         const confirmed = await confirmAction({
             title: 'Llenar datos de prueba',
@@ -334,17 +323,6 @@ export default function Dashboard() {
         });
         if (confirmed) router.post(route('settings.seed-mock'));
     };
-    const clearAllData = async () => {
-        const confirmed = await confirmAction({
-            title: 'Borrar todos los datos',
-            message: 'Se eliminarán todos los meses, gastos, deudas, pagos, ahorros y transferencias.',
-            detail: 'Esta acción no se puede deshacer.',
-            confirmLabel: 'Borrar todo',
-            tone: 'danger',
-        });
-        if (confirmed) router.post(route('settings.clear'));
-    };
-
     const swipeVariants = {
         enter: (direction) => {
             return {
@@ -367,23 +345,24 @@ export default function Dashboard() {
     };
     const [direction, setDirection] = useState(0);
 
-    const handleDragEnd = (e, { offset, velocity }) => {
-        const swipe = Math.abs(offset.x) * velocity.x;
+    /**
+     * Views only ever change on release. The old implementation passed framer's
+     * `drag` straight to each view, so the container tracked the finger 1:1 and
+     * the balance graph could never win the gesture for itself.
+     */
+    const goToView = useCallback((step) => {
+        setCurrentViewIndex((current) => {
+            const next = current + step;
+            if (next < 0 || next > 2) return current;
+            setDirection(step);
+            return next;
+        });
+    }, []);
 
-        if (swipe < -10000) {
-            // Swipe Left -> next view (Main -> Rates -> Savings)
-            if (currentViewIndex < 2) {
-                setDirection(1);
-                setCurrentViewIndex(currentViewIndex + 1);
-            }
-        } else if (swipe > 10000) {
-            // Swipe Right -> previous view
-            if (currentViewIndex > 0) {
-                setDirection(-1);
-                setCurrentViewIndex(currentViewIndex - 1);
-            }
-        }
-    };
+    const swipe = useSwipeViews({
+        onNext: () => goToView(1),
+        onPrevious: () => goToView(-1),
+    });
 
     return (
         <AuthenticatedLayout
@@ -403,7 +382,11 @@ export default function Dashboard() {
         >
             <Head title="Dashboard" />
 
-            <div className="py-6 max-w-lg mx-auto px-4 relative min-h-[85vh] overflow-x-hidden">
+            <div
+                className="py-6 max-w-lg mx-auto px-4 relative min-h-[85vh] overflow-x-hidden"
+                style={{ touchAction: 'pan-y' }}
+                {...swipe}
+            >
                 <AnimatePresence initial={false} custom={direction}>
                     {currentViewIndex === 0 && (
                         <motion.div
@@ -417,10 +400,6 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            drag="x"
-                            dragConstraints={{ left: 0, right: 0 }}
-                            dragElastic={1}
-                            onDragEnd={handleDragEnd}
                             className="absolute w-full pr-8 space-y-6 pb-24"
                         >
                 <BalanceCard
@@ -433,12 +412,10 @@ export default function Dashboard() {
 
                 <MonthSummaryStrip
                     incomeBs={budget.income_bs}
-                    expensesBs={visibleCategories.reduce((sum, category) => {
-                        if (!category.cash_expense || category.is_presupuesto) return sum;
-                        return sum + (category.expenses || []).reduce((subtotal, expense) => subtotal + (Number(expense.amount_bs) || 0), 0);
-                    }, 0)}
+                    expensesBs={stripCashExpenses}
                     paidBs={budget.debts.reduce((sum, debt) => sum + (Number(debt.payment_bs) || 0), 0)}
                     rate={budget.income_rate}
+                    insightsUrl={route('insights', { month: budget.month_id, day: dateFilter || undefined })}
                 />
 
                 <div className="space-y-3">
@@ -533,10 +510,6 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            drag="x"
-                            dragConstraints={{ left: 0, right: 0 }}
-                            dragElastic={1}
-                            onDragEnd={handleDragEnd}
                             className="absolute w-full pr-8 space-y-6 pb-24"
                         >
                             <RateHistoryDashboard
@@ -574,10 +547,6 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            drag="x"
-                            dragConstraints={{ left: 0, right: 0 }}
-                            dragElastic={1}
-                            onDragEnd={handleDragEnd}
                             className="absolute w-full pr-8 space-y-6 pb-24"
                         >
                              <SavingsDashboard
@@ -712,10 +681,7 @@ export default function Dashboard() {
 
                     <div className="space-y-1">
                         {native?.canRemoteDesktop && <button type="button" onClick={() => { setShowSettingsModal(false); setShowRemoteDesktop(true); }} className="menu-button">Escritorio remoto</button>}
-                        <button disabled={!dateFilter} onClick={() => { setShowSettingsModal(false); clearSelectedDay(); }} className="menu-button" disabled:opacity-40>Limpiar datos del día</button>
-                        <button onClick={() => { setShowSettingsModal(false); clearCurrentMonth(); }} className="menu-button">Limpiar mes actual</button>
                         <button onClick={() => { setShowSettingsModal(false); seedMockData(); }} className="menu-button">Llenar datos de prueba</button>
-                        <button onClick={() => { setShowSettingsModal(false); clearAllData(); }} className="menu-button text-red-600 dark:text-red-400">Limpiar todos los datos</button>
                         <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
                         <a href={route('settings')} className="menu-button">Configuración</a>
                         {auth?.user ? (

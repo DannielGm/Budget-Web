@@ -16,6 +16,10 @@ use Illuminate\Support\Facades\Route;
 // header, but it is not required to open or use the app.
 Route::get('/', [BudgetController::class, 'index'])->name('dashboard');
 
+// "Análisis" is a destination of its own, opened from the dashboard summary
+// strip. It reuses the dashboard payload so every figure stays in one place.
+Route::get('/insights', [BudgetController::class, 'insights'])->name('insights');
+
 // Manual "refresh BCV rate" endpoint used by the balance card.
 Route::post('/exchange-rate/refresh', [BudgetController::class, 'refreshRate'])->name('exchange-rate.refresh');
 Route::get('/exchange-rate/history', [BudgetController::class, 'historicalRate'])->name('exchange-rate.history');
@@ -30,6 +34,7 @@ Route::get('/settings', [BudgetController::class, 'settings'])->name('settings')
 Route::post('/settings/clear', [BudgetController::class, 'clearAll'])->name('settings.clear');
 Route::post('/settings/seed-mock', [BudgetController::class, 'seedMock'])->name('settings.seed-mock');
 Route::post('/settings/clear-month', [BudgetController::class, 'clearMonth'])->name('settings.clear-month');
+Route::post('/settings/clear-day', [BudgetController::class, 'clearDay'])->name('settings.clear-day');
 
 Route::post('/expenses', [ExpenseController::class, 'store'])->name('expenses.store');
 Route::patch('/expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');

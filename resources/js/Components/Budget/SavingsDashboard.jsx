@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowUpFromLine, Landmark, Wallet, Banknote, History, 
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd } from '@/lib/money';
+import useFitText from '@/hooks/useFitText';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -23,6 +24,70 @@ const partLabel = (type, id) => {
     return id || 'Categoría';
 };
 
+
+/**
+ * A single savings pool. Extracted into its own component because the fit
+ * search is a hook and cannot be called from the parent's .map callback.
+ */
+function PoolTile({ name, balanceUsd, rate, onSelect }) {
+    const [bsRef, bsSize] = useFitText({ min: 8, max: 10 });
+
+    return (
+        <div
+            onClick={() => onSelect?.(name)}
+            title={`Ver movimientos de ${POOL_LABELS[name] || name}`}
+            className="bg-black/20 rounded-xl px-2 py-3.5 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-black/40 active:scale-95 transition-all"
+        >
+            <div className="mb-2 bg-white/5 p-2 rounded-full">
+                {CAT_ICONS[name]}
+            </div>
+            <span className="text-[10px] uppercase font-bold text-white/60 tracking-wider mb-1">{POOL_LABELS[name] || name}</span>
+            <span className="text-sm font-black tabular">
+                $ {fmtUsd(balanceUsd)}
+            </span>
+            <span
+                ref={bsRef}
+                style={{ fontSize: `${bsSize}px` }}
+                className="mt-1 block text-[10px] whitespace-nowrap font-medium leading-none text-white/60 tabular"
+            >
+                &asymp; Bs {fmtBs(Number(balanceUsd || 0) * Number(rate || 0))}
+            </span>
+        </div>
+    );
+}
+
+/** The "Deposito - Ahorro -> Banco" style tag, kept on a single line. */
+function MovementTag({ children, className }) {
+    const [ref, size] = useFitText({ min: 5.5, max: 7 });
+
+    return (
+        <span
+            ref={ref}
+            style={{ fontSize: `${size}px` }}
+            className={cn(
+                "block text-[10px] whitespace-nowrap rounded bg-gray-100 dark:bg-gray-800 text-gray-500 font-bold uppercase",
+                className
+            )}
+        >
+            {children}
+        </span>
+    );
+}
+
+/** The Bs-denominated line under a movement amount, kept on a single line. */
+function BsRateLine({ value }) {
+    const [ref, size] = useFitText({ min: 8, max: 10 });
+
+    return (
+        <p
+            ref={ref}
+            style={{ fontSize: `${size}px` }}
+            className="text-[10px] whitespace-nowrap leading-none font-bold text-gray-400 tabular"
+        >
+            {value} Bs/$
+        </p>
+    );
+}
 
 export default function SavingsDashboard({ budget, savingsLedger = [], onAddSaving, onTransfer, onSelectPool, onEditTransfer }) {
     // Independent pool balances from the backend (transactions + transfers).
@@ -47,7 +112,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                     <Landmark size={120} />
                 </div>
 
-                <div className="flex justify-between items-start mb-4 relative z-10">
+                <div className="flex justify-between items-center mb-2 relative z-10">
                     <span className="text-white/80 text-sm font-medium uppercase tracking-widest">Ahorro Total</span>
                     <div className="flex gap-2">
                     <button
@@ -61,7 +126,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                     </div>
                 </div>
 
-                <div className="mb-2 relative z-10">
+                <div className="relative z-10">
                     <h1 className="text-5xl font-black font-serif tracking-tight">
                         $ {totalDisplay}
                     </h1>
@@ -72,25 +137,15 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
 
                 <div className="h-px bg-white/10 my-4 relative z-10" />
 
-                <div className="grid grid-cols-3 gap-2 relative z-10">
+                <div className="-mx-1 grid grid-cols-3 gap-2 relative z-10">
                     {pools.map(({ name, balance_usd }) => (
-                        <div
+                        <PoolTile
                             key={name}
-                            onClick={() => onSelectPool?.(name)}
-                            title={`Ver movimientos de ${POOL_LABELS[name] || name}`}
-                            className="bg-black/20 rounded-xl p-3 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-black/40 active:scale-95 transition-all"
-                        >
-                            <div className="mb-2 bg-white/5 p-2 rounded-full">
-                                {CAT_ICONS[name]}
-                            </div>
-                            <span className="text-[10px] uppercase font-bold text-white/60 tracking-wider mb-1">{POOL_LABELS[name] || name}</span>
-                            <span className="text-sm font-black tabular">
-                                $ {fmtUsd(balance_usd)}
-                            </span>
-                            <span className="block mt-1 text-[10px] font-medium text-white/60 tabular">
-                                ≈ Bs {fmtBs(Number(balance_usd || 0) * Number(budget.income_rate || 0))}
-                            </span>
-                        </div>
+                            name={name}
+                            balanceUsd={balance_usd}
+                            rate={budget.income_rate}
+                            onSelect={onSelectPool}
+                        />
                     ))}
                 </div>
             </div>
@@ -111,25 +166,25 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                             <div
                                 key={`tr-${t.id}`}
                                 onClick={() => onEditTransfer?.(t)}
-                                className="flex justify-between items-center group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-xl transition-colors"
+                                className="flex items-center justify-between gap-3 group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-xl transition-colors"
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
                                     <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
                                         <ArrowRightLeft size={16} />
                                     </div>
 
-                                        <div>
+                                        <div className="min-w-0">
                                             {(() => {
                                                 const isDeposit = t.source_type === 'cash';
                                                 return (
                                                     <React.Fragment>
-                                                        <p className="font-bold text-sm dark:text-white flex items-center gap-1">
+                                                        <p className="truncate font-bold text-sm dark:text-white">
                                                             {t.note || (isDeposit ? 'Depósito' : 'Retiro')}
-                                                            <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-500 font-bold uppercase">
-                                                                {isDeposit ? 'Depósito' : 'Retiro'} · {partLabel(t.source_type, t.source_id)} → {partLabel(t.destination_type, t.destination_id)}
-                                                            </span>
                                                         </p>
-                                                        <p className="text-[10px] text-gray-400 font-medium">
+                                                        <MovementTag className="mt-1">
+                                                                {isDeposit ? 'Depósito' : 'Retiro'} · {partLabel(t.source_type, t.source_id)} → {partLabel(t.destination_type, t.destination_id)}
+                                                            </MovementTag>
+                                                        <p className="mt-0.5 text-[10px] text-gray-400 font-medium">
                                                             {new Date(t.timestamp).toLocaleDateString('es-ES')} {new Date(t.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
                                                     </React.Fragment>
@@ -138,44 +193,40 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                         </div>
 
                                 </div>
-                                <div className="text-right">
+                                <div className="shrink-0 text-right">
                                     <p className="font-black text-sm text-blue-600 dark:text-blue-400">
                                         $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                     </p>
-                                    <p className="text-[10px] text-gray-400 font-bold">
-                                        {parseFloat(t.rate || 0).toLocaleString('es-ES')} Bs/$
-                                    </p>
+                                    <BsRateLine value={parseFloat(t.rate || 0).toLocaleString('es-ES')} />
                                 </div>
                             </div>
                         ) : (
                             (() => {
                                 const isDeposit = t.type === 'deposit';
                                 return (
-                                    <div key={t.id} className="flex justify-between items-center group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-xl transition-colors" onClick={() => onAddSaving({ ...t, category: t.pool })}>
-                                        <div className="flex items-center gap-3">
+                                    <div key={t.id} className="flex items-center justify-between gap-3 group cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 p-2 rounded-xl transition-colors" onClick={() => onAddSaving({ ...t, category: t.pool })}>
+                                        <div className="flex min-w-0 items-center gap-3">
                                             <div className={cn(
                                                 "p-2 rounded-lg",
                                                 isDeposit ? "bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"
                                             )}>
                                                 {isDeposit ? <ArrowDownToLine size={16} /> : <ArrowUpFromLine size={16} />}
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-sm dark:text-white flex items-center gap-1">
+                                            <div className="min-w-0">
+                                                <p className="truncate font-bold text-sm dark:text-white">
                                                     {isDeposit ? 'Depósito' : 'Retiro'}
-                                                    <span className="text-[10px] px-1.5 py-0.5 bg-gray-100 dark:bg-gray-800 rounded text-gray-500 font-bold uppercase">{POOL_LABELS[t.pool] || t.pool}</span>
                                                 </p>
-                                                <p className="text-[10px] text-gray-400 font-medium">
+                                                <MovementTag className="mt-1 px-1.5 py-0.5">{POOL_LABELS[t.pool] || t.pool}</MovementTag>
+                                                <p className="mt-0.5 text-[10px] text-gray-400 font-medium">
                                                     {new Date(t.timestamp).toLocaleDateString('es-ES')} {new Date(t.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
+                                        <div className="shrink-0 text-right">
                                             <p className={cn("font-black text-sm", isDeposit ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
                                                 {isDeposit ? '+' : '-'} $ {parseFloat(t.amount_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
                                             </p>
-                                            <p className="text-[10px] text-gray-400 font-bold">
-                                                {parseFloat(t.exchange_rate).toLocaleString('es-ES')} Bs/$
-                                            </p>
+                                            <BsRateLine value={parseFloat(t.exchange_rate).toLocaleString('es-ES')} />
                                         </div>
                                     </div>
                                 );
