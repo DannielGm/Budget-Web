@@ -11,7 +11,7 @@ Laravel 11, SQLite, React (Inertia.js), and Tailwind CSS. This is a web-based mi
 - **Web Dashboard**: Responsive React-based UI that replicates the Android dashboard structure.
 - **Interactive Graphing**: Multi-metric visual budget tracking powered by Recharts, showing Available Balance, Expenses, and Savings movements over time.
 - **Persistent Storage**: Backed by a clean SQLite schema with Eloquent models for Budgets, Categories, Expenses, Debts, and Savings.
-- **Savings Integrations**: Native tracking for Binance, Bank, and Physical savings with real-time BCV conversion.
+- **Savings Integrations**: Native tracking for Digital, Bank, and Physical savings with real-time BCV conversion.
 - **Theme Toggle**: Full support for Light and Dark modes with theme-aware chart colors.
 - **Análisis**: A month-health screen reached from the dashboard summary strip, deriving every figure from props the dashboard already has (no second endpoint, no second source of truth).
 - **Touch Feedback**: Short press haptics on every `.touch-feedback` control, wired through one delegated listener.
