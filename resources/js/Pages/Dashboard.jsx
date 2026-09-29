@@ -452,7 +452,7 @@ export default function Dashboard() {
                                     className={cn(
                                         'px-3 py-1 text-xs font-bold rounded-md transition-colors focus:outline-none focus:ring-0',
                                         rangeMode === mode
-                                            ? 'bg-white dark:bg-gray-700 shadow-sm dark:text-white'
+                                            ? 'bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-white'
                                             : 'text-gray-500 dark:text-gray-400',
                                         isPastMonth && !dateFilter && mode !== 'Mes' ? 'opacity-50 cursor-not-allowed' : ''
                                     )}

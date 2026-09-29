@@ -111,6 +111,22 @@ export function debtsAsOf(debts = [], dateFilter = null, budget = {}) {
  * credit is the complement of that pair. Getting this wrong would silently
  * disagree with `Budget::credit_purchases_bs` on the month view.
  */
+/**
+ * Whether one expense row is a credit purchase.
+ *
+ * The one definition of that rule, extracted because two callers need it and a
+ * second copy would be free to drift: `creditPurchasesAsOf` sums the rows, and the
+ * insights activity list tags them. Mirrors `Budget::getCreditPurchasesBsAttribute`
+ * exactly -- credit is a non-cash, non-plan category that is NOT attached to a
+ * debt, since a debt's own charges are counted against that debt.
+ */
+export function isCreditExpense(category) {
+    if (!category) return false;
+    if (category.cash_expense) return false;
+    if (category.is_presupuesto) return false;
+    return category.debt_id === null || category.debt_id === undefined;
+}
+
 export function creditPurchasesAsOf(budget = {}, dateFilter = null) {
     if (!dateFilter) return n(budget.credit_purchases_bs);
 
@@ -120,18 +136,7 @@ export function creditPurchasesAsOf(budget = {}, dateFilter = null) {
     );
 
     return (budget.expenses || [])
-        .filter((e) => {
-            const category = categoryByName.get(e.category_name);
-            if (!category) return false;
-            // Mirrors Budget::getCreditPurchasesBsAttribute exactly: credit is
-            // a non-cash, non-plan category that is NOT attached to a debt.
-            // Omitting the debt_id check double counts a debt's charges, since
-            // those are also the debt's own current charges.
-            if (category.cash_expense) return false;
-            if (category.is_presupuesto) return false;
-            if (category.debt_id !== null && category.debt_id !== undefined) return false;
-            return true;
-        })
+        .filter((e) => isCreditExpense(categoryByName.get(e.category_name)))
         .filter((e) => atOrBefore(e.timestamp, cutoff))
         .reduce((sum, e) => sum + n(e.amount_bs), 0);
 }

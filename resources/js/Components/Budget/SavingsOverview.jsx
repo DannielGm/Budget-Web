@@ -295,7 +295,11 @@ export default function SavingsOverview({ budget = {}, onSelectPool, onAddMoveme
                                this one is the market. "tasa BCV" says so here
                                rather than leaving the reader to wonder which of
                                the two is wrong. */
-                            <p className="mt-0.5 whitespace-nowrap text-[11px] font-bold tabular text-gray-500 dark:text-gray-400">
+                            /* Not nowrap. A bolivar total is a long unbreakable string,
+                               and nowrap inside this shrinkable box only pushed it
+                               out through the card's edge. Two short lines stay
+                               inside; the number keeps its tabular figures. */
+                            <p className="mt-0.5 text-[11px] font-bold tabular leading-snug text-gray-500 dark:text-gray-400">
                                 ≈ Bs {fmtBs(patrimonyBs)} &middot; tasa BCV
                             </p>
                         ) : null}

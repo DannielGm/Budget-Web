@@ -196,7 +196,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                 </div>
 
                 <div className="mb-4">
-                    <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    <h3 className="truncate whitespace-nowrap text-xs font-black uppercase tracking-widest text-gray-900 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 pb-2">
                         Historial de Movimientos
                     </h3>
                 </div>

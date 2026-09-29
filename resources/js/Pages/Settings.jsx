@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AppHeader from '@/Components/AppHeader';
 import { Head, router, usePage } from '@inertiajs/react';
 import React, { useEffect, useState } from 'react';
 import BackupCard from '@/Pages/Settings/Partials/BackupCard';

@@ -8,7 +8,13 @@
              colour of its own. useTheme keeps it in step with the light/dark
              toggle, which the system setting cannot know about. -->
         <meta name="theme-color" content="#FF8A3D">
-        <meta name="color-scheme" content="light dark">
+        <!-- Follows the app's own toggle, NOT `light dark`. That value tells the
+             browser to follow the OS, which fights an explicit user choice, and it
+             makes the blank canvas behind a crashed app render black instead of
+             white -- so a single bad import presented as a black screen with no
+             way to read what went wrong. useTheme and the pre-paint script below
+             are the only things that set this. -->
+        <meta name="color-scheme" content="light">
 
         <!-- The CSRF token for the one form in this app the browser submits
              natively. Every other request goes through Inertia, which reads the
@@ -28,8 +34,11 @@
             // Check local storage or system preference on load to prevent FOUC
             if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 document.documentElement.classList.add('dark');
+                document.documentElement.style.colorScheme = 'dark';
+                document.querySelector('meta[name="theme-color"]').setAttribute('content', '#7C5CE5');
             } else {
                 document.documentElement.classList.remove('dark');
+                document.documentElement.style.colorScheme = 'light';
             }
 
             // The display currency is read before React mounts so the first

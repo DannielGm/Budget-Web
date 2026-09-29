@@ -342,6 +342,9 @@ function SavingsSection({ d }) {
 
 const ACTIVITY_TONES = {
     expense: { cls: 'bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-300', label: 'Gasto' },
+    // Crédito is money that has not left the balance yet, so it must never wear
+    // the same badge as a cash gasto. Amber, which nothing else in this list uses.
+    credit: { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300', label: 'Crédito' },
     // Indigo matches the "Presupuesto" badge the expense card already uses, so
     // tracked spending never reads as cash leaving the balance.
     presupuesto: { cls: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300', label: 'Presupuesto' },
@@ -373,7 +376,7 @@ function ActivitySection({ d }) {
                                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${tone.cls}`}>
                                         {tone.label}
                                     </span>
-                                    <span className="w-16 shrink-0 truncate text-right text-xs font-bold tabular text-gray-800 dark:text-gray-100 sm:w-24">
+                                    <span className="whitespace-nowrap text-right text-xs font-bold tabular text-gray-800 dark:text-gray-100">
                                         Bs {fmtBs(item.amountBs, 0)}
                                     </span>
                                 </li>

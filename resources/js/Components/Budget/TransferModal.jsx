@@ -269,7 +269,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                                         ))}
                                     </select>
                                 ) : (
-                                    <div className="block w-full rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm py-2 px-3">
+                                    <div className="block w-full truncate whitespace-nowrap rounded-md border-gray-300 shadow-sm dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm py-2 px-3">
                                         <span className="text-gray-400">{EXTERNAL} (no afecta el saldo disponible)</span>
                                     </div>
                                 )}

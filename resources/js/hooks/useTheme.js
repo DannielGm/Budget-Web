@@ -22,6 +22,9 @@ export default function useTheme() {
         const next = !isDark;
         setIsDark(next);
         document.documentElement.classList.toggle('dark', next);
+        // Scrolling bars, form controls and the canvas behind a broken render all
+        // take their cue from this, and they cannot read a Tailwind class.
+        document.documentElement.style.colorScheme = next ? 'dark' : 'light';
         localStorage.theme = next ? 'dark' : 'light';
         // The Android status bar is drawn by the system, and it does not read our
         // stylesheet. Without this the status bar keeps whatever colour it had,

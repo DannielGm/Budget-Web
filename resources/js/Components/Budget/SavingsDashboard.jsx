@@ -167,9 +167,9 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
             ) : null}
 
             <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors">
-                <div className="flex items-center gap-2 mb-4">
-                    <History size={18} className="text-gray-400" />
-                    <h4 className="font-bold text-lg dark:text-white uppercase tracking-wide">
+                <div className="mb-4 flex min-w-0 items-center gap-2">
+                    <History size={18} className="shrink-0 text-gray-400" />
+                    <h4 className="truncate whitespace-nowrap text-lg font-bold uppercase tracking-wide text-gray-900 dark:text-white">
                         Historial de Movimientos
                     </h4>
                 </div>

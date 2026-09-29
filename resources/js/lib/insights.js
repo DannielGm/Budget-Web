@@ -3,7 +3,7 @@
  * be unit tested without mounting React, matching budgetExpenses.js and
  * debtMath.js.
  */
-import { calculateDebt, n } from '@/lib/debtMath';
+import { calculateDebt, isCreditExpense, n } from '@/lib/debtMath';
 import { EUR, USD } from '@/lib/currency';
 
 const n0 = (value) => Number(value) || 0;
@@ -164,15 +164,23 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
     const categoryByName = new Map(categories.map((c) => [c.name, c]));
 
     const activity = [
-        ...expenses.map((e) => ({
-            id: `e-${e.id}`,
-            timestamp: n(e.timestamp),
-            label: e.label || e.category_name || 'Gasto',
-            amountBs: n(e.amount_bs),
-            // Presupuesto categories are tracked, not taken from the balance, so
-            // they must not be reported as ordinary cash spending.
-            type: categoryByName.get(e.category_name)?.is_presupuesto ? 'presupuesto' : 'expense',
-        })),
+        ...expenses.map((e) => {
+            const category = categoryByName.get(e.category_name);
+            // Three kinds of spending, and they are genuinely different money: cash
+            // leaves the balance, a credit purchase does not yet, and a tracked
+            // expense is not spending at all. The credit test is the same predicate
+            // the credit total uses, so the tag and the figure cannot disagree.
+            let type = 'expense';
+            if (category?.is_presupuesto) type = 'presupuesto';
+            else if (isCreditExpense(category)) type = 'credit';
+            return {
+                id: `e-${e.id}`,
+                timestamp: n(e.timestamp),
+                label: e.label || e.category_name || 'Gasto',
+                amountBs: n(e.amount_bs),
+                type,
+            };
+        }),
         ...monthLedger.map((t) => ({
             id: `s-${t.kind}-${t.id}`,
             timestamp: n(t.timestamp),

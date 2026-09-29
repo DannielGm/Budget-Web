@@ -183,5 +183,47 @@ describe('buildInsights — activity typing', () => {
 
         expect(presup.amountBs).toBe(200);
     });
+
+    it('badges a credit purchase as credit rather than as a cash gasto', () => {
+        // A credit purchase has not left the balance yet, so reporting it as a
+        // gasto tells the reader their cash is gone when it is not.
+        const d = insights({
+            categories: [
+                { name: 'Comida', cash_expense: true, is_presupuesto: false },
+                { name: 'Educacion', cash_expense: false, is_presupuesto: true },
+                { name: 'Electrodomestico', cash_expense: false, is_presupuesto: false, debt_id: null },
+            ],
+            expenses: [
+                { id: 1, category_name: 'Comida', amount_bs: '100', timestamp: at(10) },
+                { id: 2, category_name: 'Educacion', amount_bs: '200', timestamp: at(11) },
+                { id: 3, category_name: 'Electrodomestico', amount_bs: '300', timestamp: at(12) },
+            ],
+        });
+
+        const types = d.activity
+            .filter((a) => a.id.startsWith('e-'))
+            .map((a) => a.type)
+            .sort();
+
+        expect(types).toEqual(['credit', 'expense', 'presupuesto']);
+        expect(d.activity.find((a) => a.type === 'credit').amountBs).toBe(300);
+    });
+
+    it('does not badge a debt-attached category as credit', () => {
+        // The backend's credit total excludes these, because they are already
+        // counted against the debt. If the badge used a second copy of that rule it
+        // would drift, and a row would claim to be credit while the total excluded
+        // it. Both read the one predicate now, and this holds them together.
+        const d = insights({
+            categories: [
+                { name: 'Comida', cash_expense: false, is_presupuesto: false, debt_id: 7 },
+            ],
+            expenses: [
+                { id: 1, category_name: 'Comida', amount_bs: '100', timestamp: at(10) },
+            ],
+        });
+
+        expect(d.activity[0].type).toBe('expense');
+    });
 });
 
