@@ -20,6 +20,9 @@ class Transfer extends Model
         'amount_bs',
         'amount_usd',
         'rate',
+        // The saving leg's currency ('USD'/'EUR'); meaningless on a cash-only
+        // transfer and left at its default there.
+        'currency',
         'timestamp',
         'note',
     ];

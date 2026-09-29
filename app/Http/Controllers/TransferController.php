@@ -18,6 +18,8 @@ class TransferController extends Controller
             'source_id' => 'nullable|required_if:source_type,saving|string',
             'destination_type' => 'required|in:cash,saving,external',
             'destination_id' => 'nullable|required_if:destination_type,saving|string',
+            // The saving leg's currency; a cash-only transfer leaves it at USD.
+            'currency' => 'nullable|string|in:USD,EUR',
             'amount_bs' => 'nullable|numeric|min:0',
             'amount_usd' => 'required|numeric|min:0.01',
             'timestamp' => 'required|numeric',
@@ -34,6 +36,7 @@ class TransferController extends Controller
         if (! is_numeric($validated['amount_bs'])) {
             $validated['amount_bs'] = 0;
         }
+        $validated['currency'] = Budget::normalizeCurrency($validated['currency'] ?? null);
         $validated['id'] = (string) Str::uuid();
 
         // The savings pools don't follow a single official rate: derive the
@@ -80,6 +83,12 @@ class TransferController extends Controller
 
         if (! is_numeric($validated['amount_bs'])) {
             $validated['amount_bs'] = 0;
+        }
+
+        // Only when it was sent: an edit that omits the currency must not move a
+        // euro transfer into the dollar pot.
+        if (array_key_exists('currency', $validated)) {
+            $validated['currency'] = Budget::normalizeCurrency($validated['currency']);
         }
 
         $validated['rate'] = (float) $validated['amount_usd'] > 0

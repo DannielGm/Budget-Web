@@ -10,7 +10,9 @@ import { useForm, router, usePage } from '@inertiajs/react';
 import { CreditCard } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
 
-export default function CategoryForm({ show, onClose, category, monthId }) {
+export default function CategoryForm({ show, onClose, category, monthId,
+    layoutId = null,
+}) {
     const { budget } = usePage().props;
     const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
@@ -100,7 +102,7 @@ export default function CategoryForm({ show, onClose, category, monthId }) {
     };
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md">
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
                     {category ? `Editar Categoría: ${category.name}` : 'Nueva Categoría'}

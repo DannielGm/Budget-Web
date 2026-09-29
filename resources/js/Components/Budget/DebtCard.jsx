@@ -1,11 +1,22 @@
 import React from 'react';
+import { motion } from 'framer-motion';
+import { useCurrencySymbol, useBolivarFigure } from '@/hooks/useFigure';
 import { CreditCard, Plus } from 'lucide-react';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { calculateDebt, unassignedCreditPurchases, n } from '@/lib/debtMath';
 
+/** Carries the shared layout id only while this form is open, so the id is
+ *  never held by two elements at once. */
+function AddTrigger({ layoutId, children }) {
+    if (!layoutId) return children;
+    return <motion.div layoutId={layoutId} className="shrink-0">{children}</motion.div>;
+}
+
 const progressClass = (value) => value >= 100 ? 'bg-emerald-500' : value > 0 ? 'bg-amber-400' : 'bg-white/15';
 
-export default function DebtCard({ debts = [], totalDebtBs, creditPurchasesBs = 0, rate, onOpenSummary, onAdd, onEdit }) {
+export default function DebtCard({ debts = [], totalDebtBs, creditPurchasesBs = 0, rate, onOpenSummary, onAdd, onEdit, layoutId = null }) {
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
     const calculated = debts.map((debt) => ({ debt, ...calculateDebt(debt, rate) }));
     const unassignedCreditBs = unassignedCreditPurchases(debts, creditPurchasesBs);
     const totalPaidBs = calculated.reduce((sum, item) => sum + item.paidBs, 0);
@@ -21,12 +32,14 @@ export default function DebtCard({ debts = [], totalDebtBs, creditPurchasesBs = 
                     <CreditCard size={18} className="shrink-0 text-gray-400" />
                     <h2 id="debt-card-title" className="truncate text-sm font-bold uppercase tracking-widest text-gray-300">Estado de Deuda</h2>
                 </button>
-                <button type="button" onClick={onAdd} aria-label="Añadir deuda" className="touch-feedback flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white"><Plus size={20} /></button>
+                <AddTrigger layoutId={layoutId}>
+                    <button type="button" onClick={onAdd} aria-label="Añadir deuda" className="touch-feedback flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white"><Plus size={20} /></button>
+                </AddTrigger>
             </div>
 
             <button type="button" onClick={onOpenSummary} className="touch-feedback mt-1 block w-full rounded-lg text-left" aria-label="Abrir resumen completo de deudas">
-                <p className="whitespace-nowrap text-3xl font-black font-serif tracking-tight tabular">Bs {fmtBs(totalDebtBs)}</p>
-                <p className="mt-1 whitespace-nowrap text-xs font-bold tabular text-gray-400">≈ $ {fmtUsd(remainingUsd)}</p>
+                <p className="whitespace-nowrap text-3xl font-black font-serif tracking-tight tabular text-white">Bs {fmtBs(totalDebtBs)}</p>
+                <p className="mt-1 whitespace-nowrap text-xs font-bold tabular text-gray-400">≈ {fmtUsd(foreign(totalDebtBs, rate))}</p>
             </button>
 
             {totalOriginalBs > 0 && (
@@ -42,7 +55,7 @@ export default function DebtCard({ debts = [], totalDebtBs, creditPurchasesBs = 
                 {unassignedCreditBs > 0 && (
                     <div role="listitem" className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2.5">
                         <span className="min-w-0 truncate text-xs font-semibold text-gray-300">Compras a crédito sin asignar</span>
-                        <span className="shrink-0 whitespace-nowrap text-right text-xs font-bold tabular">Bs {fmtBs(unassignedCreditBs)} <span className="block text-[10px] text-gray-400">≈ $ {fmtUsd(creditUsd)}</span></span>
+                        <span className="shrink-0 whitespace-nowrap text-right text-xs font-bold tabular text-white">Bs {fmtBs(unassignedCreditBs)} <span className="block text-[10px] text-gray-400">≈ {fmtUsd(foreign(unassignedCreditBs, rate))}</span></span>
                     </div>
                 )}
 
@@ -50,8 +63,8 @@ export default function DebtCard({ debts = [], totalDebtBs, creditPurchasesBs = 
                     <button type="button" role="listitem" key={debt.id} onClick={() => onEdit(debt)} className="touch-feedback flex min-h-11 w-full items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2.5 text-left hover:bg-white/10" aria-label={`Administrar deuda ${debt.label}`}>
                         <span className="min-w-0 flex-1 truncate text-xs font-semibold text-gray-200">{debt.label}</span>
                         <span className="min-w-0 shrink-0 text-right">
-                            <span className="block whitespace-nowrap text-sm font-bold tabular">Bs {fmtBs(remainingBs)}</span>
-                            <span className="block whitespace-nowrap text-[10px] tabular text-gray-400">≈ $ {fmtUsd(rowUsd)}</span>
+                            <span className="block whitespace-nowrap text-sm font-bold tabular text-white">Bs {fmtBs(remainingBs)}</span>
+                            <span className="block whitespace-nowrap text-[10px] tabular text-gray-400">≈ {fmtUsd(foreign(remainingBs, rate))}</span>
                             {paidBs > 0 && <span className="block whitespace-nowrap text-[10px] font-bold tabular text-emerald-400">{fmtPct(rowPaid, 0)}% pagado - Bs {fmtBs(paidBs)}</span>}
                             {currentChargesBs > 0 && <span className="block whitespace-nowrap text-[10px] font-bold tabular text-red-400">Nuevos cargos · Bs {fmtBs(currentChargesBs)}</span>}
                         </span>

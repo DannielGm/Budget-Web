@@ -1,8 +1,18 @@
+import { scopeMonth } from '@/lib/scopedMoney';
+
 const n = (value) => Number(value) || 0;
 const keyOf = (value) => { const d = new Date(value); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const atStart = (value) => { const d = new Date(value); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const atEnd = (value) => { const d = new Date(value); d.setHours(23, 59, 59, 999); return d.getTime(); };
-const usd = (event, fallbackRate) => n(event.amount_usd) || ((n(event.rate) || n(fallbackRate)) > 0 ? n(event.amount_bs) / (n(event.rate) || n(fallbackRate)) : 0);
+
+// The savings series is kept in Bs, like the other two metrics, so the whole
+// graph is one unit and the three cannot be compared against each other by
+// accident. Every movement that moves savings carries amount_bs already, which
+// is the figure scopedMoney uses for the same movements, so nothing has to be
+// converted to get here. The display currency is applied at render.
+const bsOf = (event) => n(event.amount_bs);
+
+const rangeDaysFor = (mode) => (mode === 'Mes' ? 30 : mode === '7d' ? 7 : 1);
 
 export function buildGraphSeries({ budget, categories = [], rangeMode = 'Mes', dateFilter, today, savingsLedger = [] }) {
     const anchor = dateFilter || today || `${budget.month_id}-01`;
@@ -23,28 +33,28 @@ export function buildGraphSeries({ budget, categories = [], rangeMode = 'Mes', d
 
     for (const transfer of budget.transfers || []) {
         if (transfer.source_type !== 'cash' && transfer.destination_type !== 'cash') continue;
-        const amount = n(transfer.amount_bs), value = usd(transfer, budget.income_rate);
+        const amount = n(transfer.amount_bs), value = bsOf(transfer);
         add(transfer.timestamp, transfer.source_type === 'cash' ? -amount : amount, 0, transfer.destination_type === 'saving' ? value : -value, transfer.note || 'Transferencia');
     }
     for (const entry of savingsLedger || []) {
         let change = 0, availableChange = 0;
         if (entry.kind === 'transaction') {
-            change = entry.type === 'deposit' ? n(entry.amount_usd) : -n(entry.amount_usd);
-            availableChange = entry.type === 'deposit' ? -n(entry.amount_bs) : n(entry.amount_bs);
+            const value = bsOf(entry);
+            change = entry.type === 'deposit' ? value : -value;
+            availableChange = entry.type === 'deposit' ? -value : value;
         } else if (entry.source_type !== 'cash' && entry.destination_type !== 'cash') {
-            const value = usd(entry, budget.income_rate);
+            const value = bsOf(entry);
             change = entry.destination_type === 'saving' ? value : entry.source_type === 'saving' ? -value : 0;
         }
         if (change || availableChange) add(entry.timestamp, availableChange, 0, change, entry.note || (change > 0 ? 'Ahorro' : 'Retiro'));
     }
 
-    // Debt payments have no per-payment timestamp in the timeline payload.
-    // Apply their cumulative total at month start so the final balance matches
-    // the server's authoritative available_balance_bs.
-    if (!dateFilter) {
-        const debtPayments = (budget.debts || []).reduce((sum, debt) => sum + n(debt.payment_bs), 0);
-        if (debtPayments) add(monthStart, -debtPayments, 0, 0, 'Pagos de deuda');
-    }
+    // Debt payments reduce the balance. scopeMonth has already reduced them to
+    // what is outstanding for this range, so the graph and the hero cannot
+    // disagree; the old `if (!dateFilter)` guard meant a day view silently
+    // dropped them and its end point did not reconcile with the card.
+    const scoped = scopeMonth(budget, { savingsLedger, dateFilter, rangeDays: rangeDaysFor(rangeMode) });
+    if (scoped.debtPaidBs) add(monthStart, -scoped.debtPaidBs, 0, 0, 'Pagos de deuda');
 
     events.sort((a, b) => a.timestamp - b.timestamp);
     const points = [];
@@ -77,14 +87,17 @@ export function buildGraphSeries({ budget, categories = [], rangeMode = 'Mes', d
     const planned = budgetCategories.reduce((sum, category) => sum + (budget.expenses || []).filter((expense) => expense.category_name === category.name).reduce((subtotal, expense) => subtotal + n(expense.amount_bs), 0), 0);
 
     // The "spent" amount is the available balance.
-    const spent = n(budget.available_balance_bs);
+    // The "spent" amount is the balance for THIS range, not the month column.
+    const spent = scoped.availableBs;
     const remaining = spent - planned;
 
     // The backend value is authoritative for the current month. Reconcile any
     // residual (for example a movement type not yet exposed in the timeline)
     // without changing expenses or savings.
-    if (!dateFilter && points.length) {
-        const reconciliation = n(budget.available_balance_bs) - points.at(-1).available;
+    if (points.length) {
+        // Reconcile against the same scoped figure on every range, so the graph's
+        // end point always equals the hero rather than only in the month view.
+        const reconciliation = scoped.availableBs - points.at(-1).available;
         if (reconciliation !== 0) {
             points.forEach((point) => { point.available += reconciliation; });
             start.available += reconciliation;

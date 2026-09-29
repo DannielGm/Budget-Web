@@ -20,6 +20,10 @@ Route::get('/', [BudgetController::class, 'index'])->name('dashboard');
 // strip. It reuses the dashboard payload so every figure stays in one place.
 Route::get('/insights', [BudgetController::class, 'insights'])->name('insights');
 
+// The savings summary follows the same arrangement: the pool strip opens it and
+// it reuses the dashboard payload rather than adding a second source of truth.
+Route::get('/savings', [BudgetController::class, 'savings'])->name('savings.dashboard');
+
 // Manual "refresh BCV rate" endpoint used by the balance card.
 Route::post('/exchange-rate/refresh', [BudgetController::class, 'refreshRate'])->name('exchange-rate.refresh');
 Route::get('/exchange-rate/history', [BudgetController::class, 'historicalRate'])->name('exchange-rate.history');

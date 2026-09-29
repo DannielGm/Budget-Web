@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
@@ -7,10 +7,12 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
+import axios from 'axios';
 import { router, useForm, usePage } from '@inertiajs/react';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
 import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
+import { useCurrencySymbol, useBolivarFigure, useRateLabel } from '@/hooks/useFigure';
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -19,11 +21,16 @@ function formatTimestamp(ms) {
     return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate }) {
+export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate,
+    layoutId = null,
+}) {
     const { budget } = usePage().props;
     const confirmAction = useConfirm();
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showRateEditor, setShowRateEditor] = useState(false);
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
+    const rateLabel = useRateLabel();
     const { data, setData, post, patch, processing, errors, reset, clearErrors, transform } = useForm({
         id: expense?.id || '',
         month_id: monthId,
@@ -38,6 +45,32 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
     const isPresupuesto = category?.is_presupuesto;
     const [moveToReal, setMoveToReal] = useState(false);
     const [targetCategory, setTargetCategory] = useState('');
+
+    // The rate the form filled in for the user, as opposed to one they typed.
+    // Moving the date must refresh the rate, but only while it is still the one
+    // we chose: a custom rate the user entered is theirs, and a date change is
+    // no licence to overwrite it.
+    const autoRate = useRef('');
+
+    // Pick the rate that was in effect on a day the user chose in this form's
+    // calendar, so a back-dated expense is converted at that day's rate instead
+    // of the month's. It is the same endpoint the balance card's day view uses.
+    //
+    // A custom rate is never overwritten: only a rate the form itself filled in
+    // follows the date. A failed lookup is ignored, because the date is what the
+    // user asked for and a missing rate must not block saving the expense.
+    const followDayRate = async (dayIso) => {
+        if (String(data.rate) !== autoRate.current) return;
+        try {
+            const { data: body } = await axios.get(route('exchange-rate.history'), { params: { date: dayIso } });
+            const rate = body?.rate;
+            if (!rate || Number(rate) <= 0) return;
+            setData('rate', rate);
+            autoRate.current = String(rate);
+        } catch {
+            // Offline, or that day predates any stored rate. Keep what we have.
+        }
+    };
 
     const realCategories = budget.categories.filter(c => !c.is_presupuesto);
     const amountBs = Number(data.amount_bs) || 0;
@@ -72,6 +105,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
             setData('category_name', categoryName);
             setData('month_id', monthId);
             setData('rate', defaultRate);
+            autoRate.current = String(defaultRate ?? '');
             setData('timestamp', Date.now());
         }
         setMoveToReal(false);
@@ -139,7 +173,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
     };
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md">
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
             <form onSubmit={submit} className="max-h-[88vh] overflow-y-auto p-5 bg-white dark:bg-gray-900 transition-colors sm:p-6">
                 <div className="mb-5 flex items-center gap-3">
                     {expense && (
@@ -177,14 +211,14 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                             />
                         </div>
                         <p id="amount-usd-help" className="mt-1 text-sm font-bold tabular text-gray-500 dark:text-gray-300">
-                            ≈ $ {fmtUsd(amountUsd)} <span className="text-xs font-medium text-gray-400">@ {fmtRate(appliedRate)} Bs/USD</span>
+                            ≈ {fmtUsd(foreign(data.amount_bs, appliedRate))} {symbol} <span className="text-xs font-medium text-gray-400">@ {fmtRate(appliedRate)} {rateLabel}</span>
                         </p>
                         <InputError message={errors.amount_bs} className="mt-2" />
                     </div>
 
                     <div className="rounded-xl border border-gray-100 dark:border-gray-800">
                         <button type="button" onClick={() => setShowRateEditor((value) => !value)} className="touch-feedback flex min-h-12 w-full items-center justify-between px-4 text-left" aria-expanded={showRateEditor}>
-                            <span><span className="block text-[10px] font-black uppercase tracking-widest text-gray-400">Tasa aplicada</span><span className="mt-0.5 block text-sm font-bold tabular text-gray-700 dark:text-gray-200">{fmtRate(appliedRate)} Bs/USD</span></span>
+                            <span><span className="block text-[10px] font-black uppercase tracking-widest text-gray-400">Tasa aplicada</span><span className="mt-0.5 block text-sm font-bold tabular text-gray-700 dark:text-gray-200">{fmtRate(appliedRate)} {rateLabel}</span></span>
                             {showRateEditor ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
                         </button>
                         {showRateEditor && (
@@ -255,6 +289,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                     const picked = new Date(`${dayIso}T00:00:00`);
                     picked.setHours(previous.getHours(), previous.getMinutes(), 0, 0);
                     setData('timestamp', picked.getTime());
+                    followDayRate(dayIso);
                 }}
             />
         </Modal>

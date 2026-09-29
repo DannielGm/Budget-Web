@@ -3,7 +3,6 @@
  * Every figure should go through these so decimals, separators and the
  * rate guard stay identical everywhere in the app.
  */
-
 const nf = (digits) => new Intl.NumberFormat('es-ES', {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,

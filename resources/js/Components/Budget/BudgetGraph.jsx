@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { buildGraphSeries } from './graph/buildGraphSeries';
-import { fmtBs, fmtUsd } from '@/lib/money';
+import { fmtBs } from '@/lib/money';
+import { USD, convert, fmtForeign } from '@/lib/currency';
 
 const METRICS = [{ id: 'available', label: 'Saldo' }, { id: 'expenses', label: 'Gastos' }, { id: 'savings', label: 'Ahorro' }];
 const compactAxis = (value) => {
@@ -11,7 +12,7 @@ const compactAxis = (value) => {
     return `${sign}${Math.round(amount)}`;
 };
 
-function Detail({ point, metric }) {
+function Detail({ point, metric, formatSavings }) {
     if (!point) return null;
     const dataKey = metric === 'expenses' ? 'cashExpenses' : metric;
     const changeKey = metric === 'expenses' ? 'expenseChange' : `${metric}Change`;
@@ -19,20 +20,37 @@ function Detail({ point, metric }) {
     return (
         <div className="mb-3 flex min-w-0 items-center justify-between gap-3 rounded-xl bg-gray-50 px-3 py-2 dark:bg-gray-800/70" aria-live="polite">
             <div className="min-w-0"><p className="truncate text-[10px] font-bold uppercase tracking-wider text-gray-400">{point.label}</p><p className="mt-0.5 truncate text-xs font-bold text-gray-700 dark:text-gray-200">{point.events.length || 'Sin movimientos'}</p></div>
-            <div className="shrink-0 text-right tabular"><p className="text-sm font-black text-gray-900 dark:text-white">{metric === 'savings' ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p><p className={`text-[10px] font-bold ${dailyChange < 0 ? 'text-red-500' : dailyChange > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>{dailyChange ? `${dailyChange > 0 ? '+' : ''}${metric === 'savings' ? `$${fmtUsd(dailyChange)}` : `Bs ${fmtBs(dailyChange)}`}` : 'Sin cambio'}</p></div>
+            <div className="shrink-0 text-right tabular"><p className="text-sm font-black text-gray-900 dark:text-white">{metric === 'savings' ? formatSavings(value) : `Bs ${fmtBs(value)}`}</p><p className={`text-[10px] font-bold ${dailyChange < 0 ? 'text-red-500' : dailyChange > 0 ? 'text-emerald-500' : 'text-gray-400'}`}>{dailyChange ? `${dailyChange > 0 ? '+' : ''}${metric === 'savings' ? formatSavings(dailyChange) : `Bs ${fmtBs(dailyChange)}`}` : 'Sin cambio'}</p></div>
         </div>
     );
 }
 
-export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today, savingsLedger }) {
+export default function BudgetGraph({ budget, categories, rangeMode, dateFilter, today, savingsLedger, savingsRate = 0, savingsCurrency = USD }) {
     const [metric, setMetric] = useState('available');
     const [activeIndex, setActiveIndex] = useState(null);
+    // The savings series is in Bs, like the other two metrics. What the user
+    // reads is the display currency, so the conversion happens here, once, at
+    // the rate for the series on screen. This used to divide by
+    // budget.income_rate and print a literal "$", which in euro mode showed a
+    // dollar figure under a euro label.
+    //
+    // The rate arrives as a prop rather than from usePage(), so the graph has
+    // no page context to read and can be rendered on its own. It also removes
+    // the failure this had once: a formatter closing over an identifier
+    // nothing bound, which is a ReferenceError at render -- a white screen --
+    // that a green build and green tests both sat through.
+    const formatSavings = useCallback(
+        (amountBs) => fmtForeign(convert(amountBs, savingsRate), savingsCurrency),
+        [savingsRate, savingsCurrency],
+    );
     const series = useMemo(() => buildGraphSeries({ budget, categories: categories || budget.categories, rangeMode, dateFilter, today, savingsLedger }), [budget, categories, rangeMode, dateFilter, today, savingsLedger]);
     const points = series.points, value = series.metrics[metric], periodChange = series.periodChange[metric];
-    const isUsd = metric === 'savings', rate = Number(budget.income_rate) || 0;
+    // The value the headline prints, already in the display currency when the
+    // metric is savings and in Bs otherwise.
+    const headline = metric === 'savings' ? formatSavings(value) : `Bs ${fmtBs(value)}`;
     const colors = metric === 'available' ? { stroke: '#FF8A3D' } : metric === 'expenses' ? { stroke: '#EF4444' } : { stroke: '#10B981' };
     const title = metric === 'available' ? 'Saldo disponible' : metric === 'expenses' ? 'Gastos acumulados' : 'Ahorro del mes';
-    const changeText = periodChange ? `${periodChange > 0 ? '+' : ''}${isUsd ? `$${fmtUsd(periodChange)}` : `Bs ${fmtBs(periodChange)}`}` : 'Sin cambios en el período';
+    const changeText = periodChange ? `${periodChange > 0 ? '+' : ''}${metric === 'savings' ? formatSavings(periodChange) : `Bs ${fmtBs(periodChange)}`}` : 'Sin cambios en el período';
     const activePoint = activeIndex === null ? null : points[Math.max(0, Math.min(activeIndex, points.length - 1))];
     const selectFromChart = (state) => { if (state?.activeLabel) { const index = points.findIndex((point) => point.key === state.activeLabel); if (index >= 0) setActiveIndex(index); } };
     const move = (direction) => setActiveIndex((index) => Math.max(0, Math.min(points.length - 1, (index ?? points.length - 1) + direction)));
@@ -50,15 +68,14 @@ export default function BudgetGraph({ budget, categories, rangeMode, dateFilter,
                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">{title}</p>
                     <span className={`shrink-0 rounded-full px-2 py-1 text-[9px] font-black uppercase tracking-wider ${healthStyles}`}>{health}</span>
                 </div>
-                <p className="mt-1 text-2xl font-black font-serif tabular text-gray-900 dark:text-white">{isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}</p>
-                {!isUsd && <p className="text-[10px] font-bold tabular text-gray-400">≈ ${fmtUsd(rate > 0 ? value / rate : 0)}</p>}
+                <p className="mt-1 text-2xl font-black font-serif tabular text-gray-900 dark:text-white">{headline}</p>
             </div>
             <div className="mb-4 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800" role="tablist" aria-label="Métrica del gráfico">
                 {METRICS.map((item) => <button key={item.id} type="button" role="tab" aria-selected={metric === item.id} onClick={() => { setMetric(item.id); setActiveIndex(null); }} className={`min-h-10 rounded-lg text-xs font-black uppercase tracking-wider transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF8A3D] dark:focus-visible:outline-[#9B7BFF] ${metric === item.id ? 'bg-white text-[#FF8A3D] shadow-sm dark:bg-gray-700 dark:text-[#9B7BFF]' : 'text-gray-500 dark:text-gray-400'}`}>{item.label}</button>)}
             </div>
             {showChart ? <>
-                <Detail point={activePoint || points.at(-1)} metric={metric} />
-                <div className="h-[190px] w-full touch-pan-y select-none" role="img" aria-label={`${title}. ${isUsd ? `$${fmtUsd(value)}` : `Bs ${fmtBs(value)}`}. Desliza para inspeccionar cada día.`} tabIndex={0} onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); } if (event.key === 'ArrowRight') { event.preventDefault(); move(1); } if (event.key === 'Escape') setActiveIndex(null); }}>
+                <Detail point={activePoint || points.at(-1)} metric={metric} formatSavings={formatSavings} />
+                <div className="h-[190px] w-full touch-pan-y select-none" role="img" aria-label={`${title}. ${headline}. Desliza para inspeccionar cada día.`} tabIndex={0} onKeyDown={(event) => { if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); } if (event.key === 'ArrowRight') { event.preventDefault(); move(1); } if (event.key === 'Escape') setActiveIndex(null); }}>
                     <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={points} margin={{ top: 8, right: 6, left: 0, bottom: 0 }} onMouseMove={selectFromChart} onTouchMove={selectFromChart}>
                             <XAxis dataKey="key" hide />

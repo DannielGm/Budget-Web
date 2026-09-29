@@ -1,11 +1,13 @@
 import React, { useMemo } from 'react';
 import {
-    ArrowLeft, Flame, PiggyBank, Wallet, CreditCard,
+    Flame, PiggyBank, Wallet, CreditCard,
     TrendingUp, TrendingDown, Receipt, Target,
 } from 'lucide-react';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { buildInsights } from '@/lib/insights';
 import useFitText from '@/hooks/useFitText';
+import { useCurrency } from '@/lib/currency';
+import { useCurrencySymbol, useBolivarFigure } from '@/hooks/useFigure';
 
 /**
  * "Análisis" — the precision instrument of the app.
@@ -74,6 +76,8 @@ function EmptyNote({ children }) {
 }
 
 function Hero({ d, rate, netRef, netSize }) {
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
     const stats = [
         { label: 'Ingresos', value: d.incomeBs, icon: TrendingUp },
         { label: 'Gastos', value: d.cashBs, icon: TrendingDown },
@@ -98,7 +102,7 @@ function Hero({ d, rate, netRef, netSize }) {
                 Bs {fmtBs(d.netBs)}
             </p>
             <p className="mt-1 whitespace-nowrap text-[11px] font-medium tabular text-gray-400">
-                &asymp; $ {fmtUsd(usd(d.netBs, rate))} · ingresos &minus; efectivo &minus; cr&eacute;dito &minus; pagos
+                &asymp; {fmtUsd(foreign(d.netBs, rate))} {symbol} · ingresos &minus; efectivo &minus; cr&eacute;dito &minus; pagos
             </p>
 
             <div className="mt-4 grid grid-cols-3 gap-2 border-t border-white/10 pt-4">
@@ -108,7 +112,7 @@ function Hero({ d, rate, netRef, netSize }) {
                             <Icon size={12} className="shrink-0" aria-hidden="true" />
                             {label}
                         </p>
-                        <p className="mt-1 truncate whitespace-nowrap text-sm font-bold tabular">
+                        <p className="mt-1 truncate whitespace-nowrap text-sm font-bold tabular text-white">
                             Bs {fmtBs(value, 0)}
                         </p>
                     </div>
@@ -250,6 +254,8 @@ function CompositionSection({ d }) {
 }
 
 function DebtSection({ d, rate }) {
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
     return (
         <Section
             title="Deudas"
@@ -262,7 +268,7 @@ function DebtSection({ d, rate }) {
                     Bs {fmtBs(d.remainingBs)}
                 </p>
                 <p className="whitespace-nowrap text-[11px] font-bold tabular text-gray-400 dark:text-gray-500">
-                    &asymp; $ {fmtUsd(usd(d.remainingBs, rate))}
+                    &asymp; {fmtUsd(foreign(d.remainingBs, rate))} {symbol}
                 </p>
             </div>
 
@@ -302,11 +308,13 @@ function DebtSection({ d, rate }) {
 }
 
 function SavingsSection({ d }) {
+    const symbol = useCurrencySymbol();
+
     return (
         <Section
             title="Tasa de ahorro"
             icon={PiggyBank}
-            meta={`$ ${fmtUsd(d.savingsTotalUsd, 0)} acumulados`}
+            meta={`${symbol} ${fmtUsd(d.savingsTotal, 0)} acumulados`}
             index={5}
         >
             <div className="flex items-end justify-between gap-3">
@@ -320,9 +328,9 @@ function SavingsSection({ d }) {
                     {fmtPct(d.savingsRatePct, 1)}%
                 </p>
                 <p className="shrink-0 whitespace-nowrap text-right text-[10px] font-semibold leading-tight tabular text-gray-400 dark:text-gray-500">
-                    $ {fmtUsd(d.depositsUsd)} depósitos
+                    {symbol} {fmtUsd(d.deposits)} depósitos
                     <br />
-                    $ {fmtUsd(d.withdrawalsUsd)} retiros
+                    {symbol} {fmtUsd(d.withdrawals)} retiros
                 </p>
             </div>
             <p className="mt-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500">
@@ -353,19 +361,19 @@ function ActivitySection({ d }) {
                             const tone = ACTIVITY_TONES[item.type] || ACTIVITY_TONES.expense;
                             const when = new Date(item.timestamp);
                             return (
-                                <li key={item.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-                                    <div className="min-w-0 flex-1">
+                                <li key={item.id} className="flex items-center gap-2 py-2 first:pt-0 last:pb-0 sm:gap-3">
+                                    <div className="min-w-0 flex-1 overflow-hidden">
                                         <p className="truncate text-xs font-semibold text-gray-700 dark:text-gray-200">
                                             {item.label}
                                         </p>
-                                        <p className="whitespace-nowrap text-[10px] tabular text-gray-400 dark:text-gray-500">
+                                        <p className="block w-full truncate text-[10px] tabular text-gray-400 dark:text-gray-500">
                                             {when.toLocaleDateString('es-ES')} {when.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                                         </p>
                                     </div>
                                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider ${tone.cls}`}>
                                         {tone.label}
                                     </span>
-                                    <span className="w-24 shrink-0 text-right text-xs font-bold tabular text-gray-800 dark:text-gray-100">
+                                    <span className="w-16 shrink-0 truncate text-right text-xs font-bold tabular text-gray-800 dark:text-gray-100 sm:w-24">
                                         Bs {fmtBs(item.amountBs, 0)}
                                     </span>
                                 </li>
@@ -377,38 +385,22 @@ function ActivitySection({ d }) {
     );
 }
 
-export default function InsightsDashboard({ budget = {}, savingsLedger = [], rate = 0, todayIso = '', onBack, onBackClick, monthLabel = '' }) {
+export default function InsightsDashboard({ budget = {}, savingsLedger = [], rate = 0, todayIso = '' }) {
+    // The savings figures count one pot, the one this currency is saved in.
+    const currency = useCurrency();
     const d = useMemo(
-        () => buildInsights(budget, { savingsLedger, rate, todayIso }),
-        [budget, savingsLedger, rate, todayIso],
+        () => buildInsights(budget, { savingsLedger, rate, todayIso, currency }),
+        [budget, savingsLedger, rate, todayIso, currency],
     );
     const [netRef, netSize] = useFitText({ min: 30, max: 48, emergencyMin: 22 });
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
 
     return (
         <div className="space-y-4 pb-10">
-            <header className="flex items-center gap-3" style={{ animationDelay: '0ms' }} data-reveal={REVEAL}>
-                {onBack ? (
-                    <a
-                        href={onBack}
-                        onClick={onBackClick}
-                        className="header-icon-button shrink-0"
-                        title="Volver al dashboard"
-                        aria-label="Volver al dashboard"
-                    >
-                        <ArrowLeft size={20} aria-hidden="true" />
-                    </a>
-                ) : null}
-                <div className="min-w-0">
-                    <h1 className="truncate font-serif text-2xl font-black uppercase tracking-tight text-white sm:text-3xl">
-                        Análisis
-                    </h1>
-                    {monthLabel ? (
-                        <p className="truncate text-[10px] font-bold uppercase tracking-widest text-white/50">
-                            {monthLabel}
-                        </p>
-                    ) : null}
-                </div>
-            </header>
+            {/* No title or back control here any more: the page header owns both
+                now, so this panel used to render a second <h1> and a second way
+                out. The month it was opened for rides along as the subtitle. */}
 
             <Hero d={d} rate={rate} netRef={netRef} netSize={netSize} />
             <PlanSection d={d} />

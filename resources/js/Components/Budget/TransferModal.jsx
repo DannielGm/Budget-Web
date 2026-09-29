@@ -9,6 +9,15 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router } from '@inertiajs/react';
 import { ArrowDownToLine, ArrowUpFromLine, Trash2 } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
+import { useRateLabel } from '@/hooks/useFigure';
+import { currencySymbol, useCurrency, USD, EUR } from '@/lib/currency';
+
+/** The two pots a transfer can move money in or out of. */
+const POT_CHOICES = [USD, EUR];
+
+const potButton = (active) => `rounded-xl border-2 px-3 py-2 text-sm font-bold transition-colors ${active
+    ? 'border-[#FF8A3D] bg-orange-50 text-[#FF8A3D] dark:border-[#9B7BFF] dark:bg-purple-950/40 dark:text-[#9B7BFF]'
+    : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'}`;
 
 const POOL_LABELS = { Digital: 'Digital', Bank: 'Banco', Physical: 'Físico' };
 const POOLS = ['Digital', 'Bank', 'Physical'];
@@ -23,7 +32,15 @@ const EXTERNAL = 'Externo';
  * The equivalent rate is always derived from the two entered amounts (pools may
  * use non-official rates), never from BCV.
  */
-export default function TransferModal({ show, onClose, monthId, transfer = null, pool = null }) {
+export default function TransferModal({ show, onClose, monthId, transfer = null, pool = null,
+    layoutId = null,
+}) {
+    // A transfer moves money into or out of a pool, and a pool keeps its dollars
+    // and its euros in separate pots, so the transfer says which one it carries.
+    // The rate itself is still derived from the two amounts entered, never from
+    // BCV, because pools may use non-official rates -- but its label follows the
+    // pot's own currency rather than whatever is on screen.
+    const displayCurrency = useCurrency();
     const confirmAction = useConfirm();
     const { data, setData, post, patch, processing, errors, reset, clearErrors } = useForm({
         month_id: monthId,
@@ -31,11 +48,16 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
         source_id: '',
         destination_type: 'saving',
         destination_id: 'Digital',
+        currency: transfer?.currency || displayCurrency,
         amount_bs: '',
         amount_usd: '',
         timestamp: Date.now(),
         note: '',
     });
+
+    // The pot's own currency, which the rate label and the amount label follow.
+    const currency = data.currency || USD;
+    const rateLabel = useRateLabel(currency);
 
     useEffect(() => {
         if (!show) return;
@@ -48,6 +70,8 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                 source_id: transfer.source_id || '',
                 destination_type: transfer.destination_type,
                 destination_id: transfer.destination_id || '',
+                // Rows written before the column existed are dollars.
+                currency: transfer.currency || USD,
                 amount_bs: transfer.amount_bs,
                 amount_usd: transfer.amount_usd,
                 timestamp: transfer.timestamp,
@@ -58,6 +82,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
 
         reset();
         setData('month_id', monthId);
+        setData('currency', displayCurrency);
         setData('timestamp', Date.now());
 
         if (pool) {
@@ -177,7 +202,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
             : (isDeposit ? 'Nuevo Depósito' : 'Nuevo Retiro');
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md">
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <div className="flex items-center gap-2 mb-6">
                     {isEditing && (
@@ -311,6 +336,27 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         </>
                     )}
 
+                    {/* Which pot is being moved. A cash-to-cash transfer has none,
+                        so the choice is only offered when a saving leg is involved. */}
+                    {(data.source_type === 'saving' || data.destination_type === 'saving') ? (
+                        <div className="mb-4">
+                            <InputLabel htmlFor="transfer_currency" value="Guardado en" className="dark:text-gray-300" />
+                            <div className="mt-1 grid grid-cols-2 gap-2">
+                                {POT_CHOICES.map((option) => (
+                                    <button
+                                        key={option}
+                                        type="button"
+                                        onClick={() => setData('currency', option)}
+                                        aria-pressed={currency === option}
+                                        className={potButton(currency === option)}
+                                    >
+                                        {currencySymbol(option)} {option}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : null}
+
                     {/* Amounts */}
                     <div className={`grid gap-4 ${isPoolToPool ? 'grid-cols-1' : 'grid-cols-2'}`}>
                         {!isPoolToPool && (
@@ -328,7 +374,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                             </div>
                         )}
                         <div>
-                            <InputLabel htmlFor="amount_usd" value="Monto ($)" className="dark:text-gray-300" />
+                            <InputLabel htmlFor="amount_usd" value={`Monto (${currencySymbol(currency)})`} className="dark:text-gray-300" />
                             <FormattedNumberInput
                                 id="amount_usd"
                                 name="amount_usd"
@@ -346,7 +392,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         <div>
                             <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
                                 {derivedRate
-                                    ? `Equivalente: Bs ${parseFloat(data.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2 })} @ ${derivedRate.toLocaleString('es-ES', { minimumFractionDigits: 2 })} Bs/$`
+                                    ? `Equivalente: Bs ${parseFloat(data.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2 })} @ ${derivedRate.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${rateLabel}`
                                     : 'Equivalente: ingresa ambos montos para ver la tasa efectiva'}
                             </p>
                         </div>

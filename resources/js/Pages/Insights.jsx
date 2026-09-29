@@ -1,4 +1,5 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import AppHeader from '@/Components/AppHeader';
 import { Head, router, usePage } from '@inertiajs/react';
 import React, { useCallback, useState } from 'react';
 import InsightsDashboard from '@/Components/Budget/InsightsDashboard';
@@ -52,9 +53,15 @@ export default function Insights() {
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="px-4 font-serif text-3xl font-black uppercase tracking-tight text-white sm:px-0">
-                    Análisis
-                </h2>
+                // Back lives in the header now, like on the other three screens. It
+                // used to sit inside the panel below, which meant this was the one
+                // page whose way out was somewhere else.
+                <AppHeader
+                    title="Análisis"
+                    subtitle={monthLabel}
+                    back={{ href: backUrl, onClick: handleBack, label: 'Volver al dashboard' }}
+                    onOpenSettings={() => router.visit(route('settings'))}
+                />
             }
         >
             <Head title="Análisis" />
@@ -74,9 +81,6 @@ export default function Insights() {
                         savingsLedger={savingsLedger || []}
                         rate={rateValue}
                         todayIso={today || dateFilter || ''}
-                        onBack={backUrl}
-                        onBackClick={handleBack}
-                        monthLabel={monthLabel}
                     />
                 </motion.div>
             </div>

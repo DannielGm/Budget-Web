@@ -56,6 +56,24 @@
         transform: scale(0.94);
     }
 
+    /* A header button that carries a short word beside its icon, so the three
+       dashboards and the currency switch can be read instead of guessed. Auto
+       width, where .header-icon-button is a fixed square. */
+    .header-pill-button {
+        display: inline-flex;
+        height: 2.75rem;
+        flex: 0 0 auto;
+        align-items: center;
+        gap: 0.375rem;
+        border-radius: 9999px;
+        color: white;
+        transition: background-color 150ms ease, color 150ms ease, transform 120ms ease;
+    }
+
+    .header-pill-button:active {
+        transform: scale(0.94);
+    }
+
     button:focus-visible,
     a:focus-visible,
     [role='button']:focus-visible {

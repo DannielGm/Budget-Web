@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Horizontal swipe between the dashboard views.
@@ -52,8 +52,58 @@ export function shouldCommit({ distance, velocity }) {
     return false;
 }
 
+/**
+ * Swallow the next click, once.
+ *
+ * A committed drag ends with the browser firing a click on whatever was under
+ * the finger. On a card that is entirely a link -- the savings pool strip is --
+ * that turns a swipe into a navigation the user never asked for: they set out
+ * for the rates view and land in the savings summary instead.
+ *
+ * One shot, and it disarms itself: a listener left armed would eat the user's
+ * next deliberate tap and read as a dead screen. `disarm` is what the timer
+ * calls when the click never came.
+ *
+ * It takes its target rather than reaching for `window`, so the rule can be
+ * tested against a plain EventTarget -- this suite runs in a node environment
+ * with no DOM.
+ */
+export function createClickSwallower(target) {
+    let armed = false;
+    const swallow = (event) => {
+        // stopImmediatePropagation, not stopPropagation: preventDefault alone
+        // leaves every handler running, and stopPropagation only stops the
+        // event travelling further -- not other listeners on the same target.
+        // The link's own onClick calls router.visit, so its handler must not run.
+        event.stopImmediatePropagation();
+        event.preventDefault();
+    };
+    return {
+        arm() {
+            if (armed || !target) return;
+            armed = true;
+            target.addEventListener('click', swallow, { capture: true, once: true });
+        },
+        disarm() {
+            if (!armed) return;
+            armed = false;
+            target.removeEventListener('click', swallow, { capture: true });
+        },
+    };
+}
+
 export function useSwipeViews({ onNext, onPrevious, disabled = false }) {
     const start = useRef(null);
+    const disarmTimer = useRef(null);
+    const [swallower] = useState(() => createClickSwallower(
+        typeof window === 'undefined' ? null : window,
+    ));
+
+    // Unmounting mid-gesture must not leave the listener behind.
+    useEffect(() => () => {
+        clearTimeout(disarmTimer.current);
+        swallower.disarm();
+    }, [swallower]);
 
     const onPointerDown = useCallback((event) => {
         if (disabled) return;
@@ -92,9 +142,36 @@ export function useSwipeViews({ onNext, onPrevious, disabled = false }) {
         const velocity = velocityOf(distance, event.timeStamp - origin.at);
 
         if (!shouldCommit({ distance, velocity })) return;
+        // Arm BEFORE changing the view: the gesture is over, and the click it
+        // produces lands on whatever is under the finger now.
+        swallower.arm();
+        clearTimeout(disarmTimer.current);
+        // The drag may have ended over no link at all, in which case no click
+        // follows and the listener must not stay armed to eat the next tap.
+        disarmTimer.current = setTimeout(() => swallower.disarm(), 350);
         if (distance < 0) onNext?.();
         else onPrevious?.();
-    }, [onNext, onPrevious]);
+    }, [onNext, onPrevious, swallower]);
 
     return { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: () => { start.current = null; } };
+}
+/** The dashboard's swipe views, by name. The name is what the URL carries. */
+export const VIEW_INDEX = { main: 0, rates: 1, savings: 2 };
+
+/**
+ * The view a URL asks for, or the fallback when it says nothing.
+ *
+ * The dashboard seeds its swipe index from this, so coming back from the savings
+ * summary returns to the savings screen rather than to the balance card. A name
+ * the app does not have falls back instead of putting the dashboard into a state
+ * with nothing to show.
+ */
+export function viewIndexOf(name, fallback = 0) {
+    const index = VIEW_INDEX[String(name ?? '').toLowerCase()];
+    return index === undefined ? fallback : index;
+}
+
+/** The name to put in the URL for an index, so a visit returns here. */
+export function viewNameOf(index) {
+    return Object.keys(VIEW_INDEX).find((name) => VIEW_INDEX[name] === index) || 'main';
 }

@@ -1,11 +1,13 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import DashboardHeader from '@/Components/DashboardHeader';
+import AppHeader from '@/Components/AppHeader';
 import { Head, usePage, router } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
 import MonthSummaryStrip from '@/Components/Budget/MonthSummaryStrip';
 import { calculateCashExpenses } from '@/lib/budgetExpenses';
+import { scopeMonth } from '@/lib/scopedMoney';
+import { expensesInRange, filteredCategories } from '@/lib/rangeHelpers';
 import ExpenseForm from '@/Components/Budget/ExpenseForm';
 import DebtCard from '@/Components/Budget/DebtCard';
 
@@ -22,16 +24,29 @@ import TransferModal from '@/Components/Budget/TransferModal';
 import Modal from '@/Components/Modal';
 import RemoteDesktopPanel from '@/Components/RemoteDesktopPanel';
 import { useConfirm } from '@/Components/ConfirmationProvider';
-import { Plus, Moon, Sun, MoreVertical, Calendar as CalendarIcon, Home, Edit2, Trash2, Settings as SettingsIcon, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
+import { useCurrency, counterpartOf } from '@/lib/currency';
+import { useFigure } from '@/hooks/useFigure';
+// Moon, Sun, MoreVertical, CalendarIcon, Home and SettingsIcon were imported for
+// the header that has moved to AppHeader; the view icons below are the header's.
+import { Plus, Wallet, BarChart3, TrendingUp, X } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSwipeViews } from '@/hooks/useSwipeViews';
+import { useSwipeViews, viewIndexOf, viewNameOf } from '@/hooks/useSwipeViews';
 import useHapticFeedback from '@/hooks/useHapticFeedback';
 
+/**
+ * Wraps a trigger control in the shared-layout element its form will morph
+ * from. The id is applied only while that form is open, so two elements never
+ * hold the same layoutId at the same time.
+ */
+function ModalOrigin({ id, active, children }) {
+    if (!active) return children;
+    return <motion.div layoutId={id}>{children}</motion.div>;
+}
+
 const DebtSummaryModal = lazy(() => import('@/Components/Budget/DebtSummaryModal'));
-const SavingsPoolSummaryModal = lazy(() => import('@/Components/Budget/SavingsPoolSummaryModal'));
 const BudgetGraph = lazy(() => import('@/Components/Budget/BudgetGraph'));
 
 const MONTH_SHORT = [
@@ -40,70 +55,34 @@ const MONTH_SHORT = [
 ];
 
 /**
- * Port of the Kotlin BudgetScreen's filtering rules:
- *  - null dateFilter  -> every expense
- *  - rangeDays >= 30  -> the whole month
- *  - rangeDays <= 1   -> only the same local day
- *  - otherwise        -> the last N days, clamped to the 1st of the month
+ * The three swipeable dashboards, in swipe order.
+ *
+ * The index is the contract: it is what the URL's `view` parameter carries and
+ * what `changeView` takes, so the order here is the order a swipe moves through.
+ * It lives in the page rather than the header because the page owns the view
+ * state; the header only draws the switcher it is handed.
  */
-export function filteredCategories(budget, dateFilter, rangeDays) {
-    if (dateFilter === null || dateFilter === undefined) {
-        return budget.categories;
-    }
-
-    if (rangeDays >= 30) {
-        return budget.categories;
-    }
-
-    if (rangeDays <= 1) {
-        return budget.categories
-            .map((category) => ({
-                ...category,
-                expenses: budget.expenses.filter(
-                    (e) => e.category_name === category.name && sameDay(e.timestamp, dateFilter),
-                ),
-            }))
-            .filter((c) => c.expenses.length > 0);
-    }
-
-    const end = new Date(`${dateFilter}T23:59:59`);
-    const start = new Date(end);
-    start.setDate(end.getDate() - (rangeDays - 1));
-    const floor = new Date(`${dateFilter.slice(0, 7)}-01T00:00:00`);
-    if (start < floor) start.setTime(floor.getTime());
-
-    return budget.categories
-        .map((category) => ({
-            ...category,
-            expenses: budget.expenses.filter((e) => {
-                const t = new Date(e.timestamp);
-                return e.category_name === category.name && t >= start && t <= end;
-            }),
-        }))
-        .filter((c) => c.expenses.length > 0);
-}
-
-function sameDay(timestampMs, dateIso) {
-    const d = new Date(timestampMs);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return iso === dateIso;
-}
+const VIEWS = [
+    { icon: BarChart3, index: 0, title: 'Presupuesto' },
+    { icon: TrendingUp, index: 1, title: 'Tasas BCV' },
+    { icon: Wallet, index: 2, title: 'Ahorros' },
+];
 
 export default function Dashboard() {
     const {
-        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger, native,
+        budget, monthIds, version, auth, contextRate, dateFilter, today, currentMonthId, rate, savingsLedger, native, rates = {}, view,
     } = usePage().props;
     const confirmAction = useConfirm();
+    // The rate history shows this series, with the other one as a comparison.
+    const currency = useCurrency();
+    // The rate the graph converts its savings series at: whichever series is on
+    // screen, or the user's own number when the rate is custom. useFigure
+    // already resolves exactly that question, so the graph does not have to.
+    const { rate: graphRate } = useFigure();
 
     // One delegated listener answers every .touch-feedback control in the app.
     useHapticFeedback();
 
-    const [isDark, setIsDark] = useState(() => {
-        if (typeof window !== 'undefined') {
-            return document.documentElement.classList.contains('dark');
-        }
-        return false;
-    });
     const [selectedCategoryName, setSelectedCategoryName] = useState(budget.categories[0]?.name);
     const [showCalendar, setShowCalendar] = useState(false);
     const [rangeMode, setRangeMode] = useState('Mes');
@@ -122,12 +101,13 @@ export default function Dashboard() {
     const [showDebtSummary, setShowDebtSummary] = useState(false);
     const [showTransferModal, setShowTransferModal] = useState(false);
     const [editingTransfer, setEditingTransfer] = useState(null);
-    const [selectedPool, setSelectedPool] = useState(null);
-    const [movementPool, setMovementPool] = useState(null);
+
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [showRemoteDesktop, setShowRemoteDesktop] = useState(false);
-    // View state for swipeable dashboard (0 = Main, 1 = Rates, 2 = Savings)
-    const [currentViewIndex, setCurrentViewIndex] = useState(0);
+    // View state for swipeable dashboard (0 = Main, 1 = Rates, 2 = Savings).
+    // Seeded from the URL: the view is otherwise gone the moment the user leaves
+    // for the savings summary, and the return landed on the balance card.
+    const [currentViewIndex, setCurrentViewIndex] = useState(() => viewIndexOf(view));
 
     const changeView = (index) => {
         if (index === currentViewIndex) return;
@@ -151,8 +131,10 @@ export default function Dashboard() {
         setRateLoading(true);
         setRateError(null);
         try {
-            const { data } = await axios.get(route('exchange-rate.series'), { params: { range } });
-            setRateSeriesByRange((prev) => ({ ...prev, [range]: data.series }));
+            // Ask for the series on screen; the endpoint returns the other one
+            // alongside it as the comparison line, so both arrive in one request.
+            const { data } = await axios.get(route('exchange-rate.series'), { params: { range, currency } });
+            setRateSeriesByRange((prev) => ({ ...prev, [range]: data }));
         } catch (err) {
             setRateError(err?.message || 'Error de red');
         } finally {
@@ -219,22 +201,17 @@ export default function Dashboard() {
         }
     }, [isPastMonth, dateFilter]);
 
-    const toggleTheme = () => {
-        const nextDark = !isDark;
-        setIsDark(nextDark);
-        if (nextDark) {
-            document.documentElement.classList.add('dark');
-            localStorage.theme = 'dark';
-        } else {
-            document.documentElement.classList.remove('dark');
-            localStorage.theme = 'light';
-        }
-    };
+    // The theme lives in the header now: it is an app-wide display preference,
+    // and it used to be unreachable from the other three screens because it was
+    // state on this page only.
 
     // ---- Month / day navigation -------------------------------------------
     const navigate = (monthId, dayIso) => {
         const query = { month: monthId };
         if (dayIso) query.day = dayIso;
+        // Carry the open view: switching month from the rates or the savings
+        // screen should not throw the user back onto the balance card.
+        if (currentViewIndex > 0) query.view = viewNameOf(currentViewIndex);
 
         router.get(route('dashboard'), query, { preserveState: true, preserveScroll: true });
     };
@@ -260,8 +237,31 @@ export default function Dashboard() {
     // BalanceCard and the graph so the three surfaces cannot disagree.
     const stripCashExpenses = calculateCashExpenses(budget, dateFilter);
 
+    // A day filter drops categories that have no expenses that day, so the
+    // selected one can be missing from the list. The fallback keeps the
+    // category's identity and applies the SAME filter as the list: empty for
+    // a day with no matching movements, the full month when no day is set.
     const selectedCategory = visibleCategories.find((c) => c.name === selectedCategoryName)
-        ?? budget.categories.find((c) => c.name === selectedCategoryName);
+        ?? (() => {
+            const full = budget.categories.find((c) => c.name === selectedCategoryName);
+            if (!full) return full;
+            return { ...full, expenses: expensesInRange(budget, full.name, dateFilter, rangeDaysFor(rangeMode)) };
+        })();
+
+    // Day/range state for debts. With no filter this is the month view and both
+    // helpers return the stored totals untouched.
+    // One definition of the range, shared by the hero, the strip, the debts card
+    // and the plan tint. Deriving these in four places is how they came to
+    // disagree with each other under a day filter.
+    const scoped = scopeMonth(budget, {
+        savingsLedger: savingsLedger || [],
+        dateFilter,
+        rangeDays: rangeDaysFor(rangeMode),
+    });
+    const scopedDebts = scoped.debts;
+    const scopedCreditPurchasesBs = scoped.creditBs;
+    const scopedPaidBs = scoped.debtPaidBs;
+    const scopedDebtBs = scoped.debtRemainingBs;
 
     const isNotToday = dateFilter !== null || budget.month_id !== currentMonthId;
 
@@ -304,14 +304,10 @@ export default function Dashboard() {
     const creditPurchasesBs = parseFloat(budget.credit_purchases_bs || 0);
     const totalDebtBs = parseFloat(budget.debt_bs || 0);
 
-    const totalPresupuestoBs = (budget.categories || [])
-        .filter(c => c.is_presupuesto)
-        .reduce((sum, c) => {
-            const catExpenses = (budget.expenses || []).filter(e => e.category_name === c.name);
-            return sum + catExpenses.reduce((s, e) => s + parseFloat(e.amount_bs || 0), 0);
-        }, 0);
-
-    const isBudgetOk = parseFloat(budget.available_balance_bs || 0) >= totalPresupuestoBs;
+    // Scoped to the active range so the green/red tint on the expense rows
+    // answers the question actually on screen. scopeMonth folds the plan total
+    // and the balance together, so the two cannot disagree.
+    const isBudgetOk = scoped.planFitsBalance;
 
     const seedMockData = async () => {
         const confirmed = await confirmAction({
@@ -346,6 +342,20 @@ export default function Dashboard() {
     const [direction, setDirection] = useState(0);
 
     /**
+     * Shared-layout ids for the forms. The button that opens a form and the
+     * modal it opens carry the same id, so the panel grows out of the control
+     * that was tapped instead of appearing from nowhere.
+     */
+    const MODAL_IDS = {
+        expense: 'modal-expense',
+        debt: 'modal-debt',
+        savings: 'modal-savings',
+        transfer: 'modal-transfer',
+        budget: 'modal-budget',
+        category: 'modal-category',
+    };
+
+    /**
      * Views only ever change on release. The old implementation passed framer's
      * `drag` straight to each view, so the container tracked the finger 1:1 and
      * the balance graph could never win the gesture for itself.
@@ -367,15 +377,15 @@ export default function Dashboard() {
     return (
         <AuthenticatedLayout
             header={
-                <DashboardHeader
-                    headerLabel={headerLabel}
-                    isNotToday={isNotToday}
+                <AppHeader
+                    title={headerLabel}
+                    onTitleClick={() => setShowCalendar(true)}
+                    titleHint={`Elegir mes o día. Periodo actual: ${headerLabel}`}
                     onGoToToday={goToToday}
-                    onOpenCalendar={() => setShowCalendar(true)}
+                    isNotToday={isNotToday}
+                    views={VIEWS}
                     currentViewIndex={currentViewIndex}
                     onChangeView={changeView}
-                    isDark={isDark}
-                    onToggleTheme={toggleTheme}
                     onOpenSettings={() => setShowSettingsModal(true)}
                 />
             }
@@ -383,7 +393,17 @@ export default function Dashboard() {
             <Head title="Dashboard" />
 
             <div
-                className="py-6 max-w-lg mx-auto px-4 relative min-h-[85vh] overflow-x-hidden"
+                // No horizontal padding here, and that is deliberate. The three
+                // swipe views below are absolutely positioned, so their containing
+                // block is this element's PADDING box: `w-full` would be the full
+                // width including any padding, while the box itself sits at the
+                // CONTENT edge. Padding here plus `w-full` on a view therefore
+                // pushed every view 16px past the right edge, where
+                // `overflow-x-hidden` silently clipped the right of every card.
+                // An old `pr-8` on each view cancelled that overshoot, which is
+                // why it went unnoticed for so long. The views are anchored
+                // `left-0 right-0` and carry the `px-4` themselves instead.
+                className="py-6 max-w-lg mx-auto relative min-h-[85vh] overflow-x-hidden"
                 style={{ touchAction: 'pan-y' }}
                 {...swipe}
             >
@@ -400,20 +420,22 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            className="absolute w-full pr-8 space-y-6 pb-24"
+                            className="absolute left-0 right-0 space-y-6 px-4 pb-24"
                         >
                 <BalanceCard
                     budget={budget}
                     contextRate={contextRate}
                     rate={rate}
                     dateFilter={dateFilter}
+                    rangeDays={rangeDaysFor(rangeMode)}
+                    savingsLedger={savingsLedger || []}
                     onEdit={() => setShowBudgetModal(true)}
                 />
 
                 <MonthSummaryStrip
                     incomeBs={budget.income_bs}
                     expensesBs={stripCashExpenses}
-                    paidBs={budget.debts.reduce((sum, debt) => sum + (Number(debt.payment_bs) || 0), 0)}
+                    paidBs={scopedPaidBs}
                     rate={budget.income_rate}
                     insightsUrl={route('insights', { month: budget.month_id, day: dateFilter || undefined })}
                 />
@@ -463,30 +485,34 @@ export default function Dashboard() {
                             dateFilter={dateFilter}
                             today={today}
                             savingsLedger={savingsLedger || []}
+                            savingsRate={graphRate}
+                            savingsCurrency={currency}
                         />
                     </Suspense>
                 </div>
 
                 {/* Deuda Card */}
                 <DebtCard
-                    debts={budget.debts}
-                    totalDebtBs={totalDebtBs}
-                    creditPurchasesBs={creditPurchasesBs}
+                    debts={scopedDebts}
+                    totalDebtBs={scopedDebtBs}
+                    creditPurchasesBs={scopedCreditPurchasesBs}
                     rate={effectiveRate}
                     onOpenSummary={() => setShowDebtSummary(true)}
                     onAdd={() => { setEditingDebt(null); setShowDebtModal(true); }}
+                    layoutId={showDebtModal ? MODAL_IDS.debt : null}
                     onEdit={handleEditDebt}
                 />
 
                 <ExpenseCard
                     ref={expensesContainerRef}
                     category={selectedCategory}
-                    expenses={selectedCategory?.expenses ?? budget.expenses.filter(e => e.category_name === selectedCategoryName)}
+                    expenses={selectedCategory?.expenses ?? []}
                     selectedRate={effectiveRate}
                     isBudgetOk={isBudgetOk}
                     dateFilter={dateFilter}
                     onSelectCategory={() => setShowCategoryAccordion(true)}
                     onAdd={handleAddExpense}
+                layoutId={showExpenseModal ? MODAL_IDS.expense : null}
                     onEdit={handleEditExpense}
                     onDelete={handleDeleteExpense}
                 />
@@ -510,11 +536,14 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            className="absolute w-full pr-8 space-y-6 pb-24"
+                            className="absolute left-0 right-0 space-y-6 px-4 pb-24"
                         >
                             <RateHistoryDashboard
                                 rate={rate}
-                                points={rateSeriesByRange[rateRange] || null}
+                                points={rateSeriesByRange[rateRange]?.series || null}
+                                comparison={rateSeriesByRange[rateRange]?.comparison || null}
+                                currency={rateSeriesByRange[rateRange]?.currency || currency}
+                                comparisonCurrency={rateSeriesByRange[rateRange]?.comparison_currency || counterpartOf(currency)}
                                 loading={rateLoading}
                                 error={rateError}
                                 refreshing={refreshingRate}
@@ -547,18 +576,21 @@ export default function Dashboard() {
                                 x: { type: "spring", stiffness: 300, damping: 30 },
                                 opacity: { duration: 0.2 }
                             }}
-                            className="absolute w-full pr-8 space-y-6 pb-24"
+                            className="absolute left-0 right-0 space-y-6 px-4 pb-24"
                         >
                              <SavingsDashboard
                                 budget={budget}
                                 savingsLedger={savingsLedger || []}
-                                onSelectPool={(poolName) => setSelectedPool(poolName)}
+                                dateFilter={dateFilter}
+                                rangeDays={rangeDaysFor(rangeMode)}
+                                summaryUrl={route('savings.dashboard', { month: budget.month_id, day: dateFilter || undefined })}
                                 onEditTransfer={(t) => setEditingTransfer(t)}
                                 onAddSaving={(transaction) => {
                                     setEditingSaving(transaction);
                                     setShowSavingsModal(true);
                                 }}
                                 onTransfer={() => setShowTransferModal(true)}
+                transferLayoutId={showTransferModal ? MODAL_IDS.transfer : null}
                             />
 
                             <footer className="text-center pb-8">
@@ -573,21 +605,25 @@ export default function Dashboard() {
 
             {/* Modals */}
             <ExpenseForm
+                layoutId={MODAL_IDS.expense}
                 show={showExpenseModal}
                 onClose={() => setShowExpenseModal(false)}
                 expense={editingExpense}
                 categoryName={selectedCategoryName}
                 monthId={budget.month_id}
-                defaultRate={budget.income_rate}
+                defaultRate={contextRate}
             />
 
             <BudgetForm
+                layoutId={MODAL_IDS.budget}
                 show={showBudgetModal}
                 onClose={() => setShowBudgetModal(false)}
                 budget={budget}
+                rates={rates}
             />
 
             <DebtForm
+                layoutId={MODAL_IDS.debt}
                 show={showDebtModal}
                 onClose={() => setShowDebtModal(false)}
                 debt={editingDebt}
@@ -596,6 +632,7 @@ export default function Dashboard() {
             />
 
             <CategoryForm
+                layoutId={MODAL_IDS.category}
                 show={showCategoryModal}
                 onClose={() => setShowCategoryModal(false)}
                 category={editingCategory}
@@ -622,11 +659,11 @@ export default function Dashboard() {
             />
 
             <SavingsForm
+                layoutId={MODAL_IDS.savings}
                 show={showSavingsModal}
                 onClose={() => setShowSavingsModal(false)}
                 transaction={editingSaving}
                 monthId={budget.month_id}
-                defaultRate={budget.income_rate}
             />
 
             <Suspense fallback={null}>
@@ -640,27 +677,6 @@ export default function Dashboard() {
                         totalDebtBs={totalDebtBs}
                     />
                 )}
-                                {selectedPool && (
-                    <SavingsPoolSummaryModal
-                        show={selectedPool !== null}
-                        onClose={() => setSelectedPool(null)}
-                        pool={selectedPool}
-                        pools={budget.savings_pools || []}
-                        savingsLedger={savingsLedger || []}
-                        currentRate={budget.income_rate}
-                        onAddMovement={(poolName) => setMovementPool(poolName)}
-                        onEditMovement={(t) => {
-                            setSelectedPool(null);
-                            if (t.kind === 'transfer') {
-                                setEditingTransfer(t);
-                            } else {
-                                setEditingSaving({ ...t, category: t.pool });
-                                setShowSavingsModal(true);
-                            }
-                        }}
-                    />
-                )}
-
             </Suspense>
 
             <Modal
@@ -704,15 +720,14 @@ export default function Dashboard() {
             <RemoteDesktopPanel show={showRemoteDesktop} onClose={() => setShowRemoteDesktop(false)} />
 
             <TransferModal
-                show={showTransferModal || editingTransfer !== null || movementPool !== null}
+                layoutId={MODAL_IDS.transfer}
+                show={showTransferModal || editingTransfer !== null}
                 onClose={() => {
                     setShowTransferModal(false);
                     setEditingTransfer(null);
-                    setMovementPool(null);
                 }}
                 monthId={budget.month_id}
                 transfer={editingTransfer}
-                pool={movementPool}
             />
 
             {/* Month/Day calendar picker (port of BudgetCalendar.kt) */}

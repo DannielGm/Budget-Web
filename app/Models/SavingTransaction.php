@@ -17,6 +17,9 @@ class SavingTransaction extends Model
         'month_id',
         'type', // 'deposit' or 'withdrawal'
         'category', // e.g. 'Digital', 'Bank', 'Physical'
+        // 'USD' or 'EUR'. `amount_usd` holds the amount IN this currency -- the
+        // column name is historical, see the migration that added this one.
+        'currency',
         'amount_usd',
         'exchange_rate',
         'amount_bs', // Calculated before save: amount_usd * exchange_rate

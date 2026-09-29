@@ -15,6 +15,7 @@ use App\Models\Expense;
 use App\Models\DebtPayment;
 use App\Models\SavingTransaction;
 use App\Models\Transfer;
+use App\Support\DisplayCurrency;
 use App\Support\NativeCapabilities;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,18 @@ class BudgetController extends Controller
     }
 
     /**
+     * The savings summary, opened from the pool strip in the savings view. Same
+     * arrangement as "Analisis": the dashboard payload under another view name,
+     * so the two screens can never disagree about a figure.
+     */
+    public function savings(Request $request): Response
+    {
+        [$view, $props] = $this->budgetPayload($request, 'Savings');
+
+        return Inertia::render($view, $props);
+    }
+
+    /**
      * @return array{0: string, 1: array}
      */
     private function budgetPayload(Request $request, string $view): array
@@ -63,11 +76,41 @@ class BudgetController extends Controller
         $budget = $this->budgetService->loadOrCreate($monthId);
         $monthRate = $this->rateService->monthRateFor($monthId);
 
-        // When a day filter is active the balance uses the rate that was in
-        // effect on that day, falling back to the month rate.
-        $contextRate = $dayIso
+        // Both series travel with the payload. The frontend picks between them
+        // per figure, so a euro display can use a real historical euro rate for a
+        // picked day while a custom rate stays the user's own number.
+        $monthRateEur = $this->rateService->monthRateFor($monthId, ExchangeRate::EUR);
+        $dayRateEur = $dayIso
+            ? $this->rateService->dayRate($dayIso, $monthRateEur, ExchangeRate::EUR)
+            : null;
+
+        $dayRateUsd = $dayIso
             ? $this->rateService->dayRate($dayIso, $monthRate)
-            : $monthRate;
+            : null;
+
+        // The rate the balance card's own conversion divides at, which is what a
+        // new expense must start from: the day's rate when a day filter is
+        // active, and otherwise whatever the budget form holds.
+        //
+        // It deliberately does NOT fall back to the BCV month rate. That number
+        // is the first of the month carried forward, so a budget whose form holds
+        // a custom rate would hand a new expense a rate the balance card is not
+        // even showing: the expense would convert at one number while the screen
+        // reads in another. The form's number is the fallback, exactly as it is
+        // for the card (rateFor() falls back to rates.effective), and a day with
+        // no published observation falls back to it too.
+        $contextRate = $dayIso
+            ? $this->rateService->dayRate($dayIso)
+            : null;
+
+        // Today's published rate per series. This is what the budget form's
+        // daily switch writes, and it has to be a real observation rather than
+        // the month's: the switch promises a DAILY rate, and the month rate is
+        // the first of the month carried forward, which by the 2nd is already
+        // yesterday's number. latestOnOrBefore() carries across days BCV did
+        // not publish, so an unupdated morning still shows a real figure.
+        $latestUsd = $this->rateService->latestOnOrBefore(CarbonImmutable::today()->toDateString(), ExchangeRate::USD);
+        $latestEur = $this->rateService->latestOnOrBefore(CarbonImmutable::today()->toDateString(), ExchangeRate::EUR);
 
         $budget->load(['categories', 'expenses', 'debts', 'debts.payments', 'savingsTransactions', 'transfers']);
         $budget->debts->each->append('credit_expenses_bs');
@@ -83,6 +126,7 @@ class BudgetController extends Controller
             'debt_bs',
             'savings_pools',
             'total_savings_usd',
+            'total_savings_eur',
         ]);
 
         return [$view, [
@@ -92,7 +136,42 @@ class BudgetController extends Controller
             'version' => config('budget.version'),
             'rate' => $rateSnapshot,
             'contextRate' => $contextRate?->rate_bs_per_usd ?? $budget->income_rate,
+            'rates' => [
+                // The rate the whole screen converts at: whatever the budget
+                // form holds. It is the single source of truth for the month, so
+                // a custom rate is honoured everywhere rather than being saved
+                // and then ignored. refreshMonthRates() keeps it tracking BCV on
+                // every load unless it is custom, so "the form wins" needs no
+                // enforcement here -- the self-heal IS the enforcement.
+                //
+                // The BCV month rate is deliberately NOT what figures divide by.
+                // It used to be, which meant a custom income_rate was stored and
+                // then never displayed anywhere.
+                'effective' => (string) $budget->income_rate,
+
+                // The two real BCV series, kept for the two things that genuinely
+                // need them: the daily switch writes the latest, and savings --
+                // stored in dollars -- need Bs/USD to show a bolivar line
+                // whichever series is on screen.
+                'usd' => [
+                    'latest' => $latestUsd?->rate_bs_per_usd ?? null,
+                    'day' => $dayRateUsd?->rate_bs_per_usd ?? null,
+                ],
+                'eur' => [
+                    'latest' => $latestEur?->rate_bs_per_usd ?? null,
+                    'day' => $dayRateEur?->rate_bs_per_usd ?? null,
+                ],
+            ],
+            'isCustomRate' => (bool) $budget->is_custom_rate,
             'dateFilter' => $dayIso,
+            // Which dashboard view to open on. The view is client state, so it
+            // has to travel in the URL: without it, a return visit from the
+            // savings summary lands on the balance card instead of the savings
+            // screen the user left. Sanitised here so a hand-typed query cannot
+            // ask for a view that does not exist.
+            'view' => in_array($request->query('view'), ['main', 'rates', 'savings'], true)
+                ? $request->query('view')
+                : null,
             'today' => CarbonImmutable::today()->toDateString(),
             'currentMonthId' => CarbonImmutable::today()->format('Y-m'),
             'monthIdsHaveRates' => $rateSnapshot['updated_today'],
@@ -122,6 +201,11 @@ class BudgetController extends Controller
     {
         $snapshot = $this->rateService->ensureFresh(true);
 
+        // Refreshing is a deliberate tap, so this is where the archive belongs:
+        // it is what makes the 1A and "Todo" ranges show a real year of history
+        // instead of only the months this device has managed to store.
+        $this->rateService->ensureFullArchive();
+
         // Bust the series cache so the rates view shows the fresh figure.
         Cache::put('rate-series:generation', (int) Cache::get('rate-series:generation', 1) + 1);
 
@@ -132,14 +216,22 @@ class BudgetController extends Controller
     {
         $validated = $request->validate([
             'date' => 'required|date_format:Y-m-d',
+            'currency' => 'nullable|in:USD,EUR',
         ]);
+
+        // The series asked for is the series the user is looking at. Asking for
+        // the dollar rate and storing it in a euro screen would put a real but
+        // wrong number into income_rate, so this defaults to the cookie rather
+        // than to dollars, and the picker sends the currency it is showing.
+        $currency = $validated['currency'] ?? DisplayCurrency::current($request);
 
         // Days without their own BCV publication inherit the closest earlier
         // observation (backward carry), same rule as the rates dashboard.
-        $rate = $this->rateService->latestOnOrBefore($validated['date']);
+        $rate = $this->rateService->latestOnOrBefore($validated['date'], $currency);
 
         return response()->json([
-            'rate' => $rate?->rate_bs_per_usd ?? '0'
+            'rate' => $rate?->rate_bs_per_usd ?? '0',
+            'currency' => $currency,
         ]);
     }
 
@@ -155,9 +247,18 @@ class BudgetController extends Controller
     {
         $validated = $request->validate([
             'range' => 'nullable|in:30,90,180,365,all',
+            'currency' => 'nullable|in:USD,EUR',
         ]);
 
         $range = (string) ($validated['range'] ?? '180');
+
+        // The series on screen is the primary; the other one travels beside it
+        // as a comparison. Both are real BCV observations of the same unit --
+        // bolivares per one unit of the currency -- so they can share one axis
+        // honestly. Neither is derived from the other: each is read from its
+        // own rows, so a day missing from one series cannot borrow the other's.
+        $currency = $validated['currency'] ?? DisplayCurrency::current($request);
+        $other = DisplayCurrency::counterpart($currency);
 
         // BCV occasionally publishes the rate for the next day(s) ahead of
         // time. Carry the window a few days past today so those forward rates
@@ -165,26 +266,37 @@ class BudgetController extends Controller
         $to = CarbonImmutable::today()->addDays(self::RATE_SERIES_LOOKAHEAD_DAYS)->toDateString();
 
         if ($range === 'all') {
-            // Ask the API for the complete archive (guarded to 1 attempt / 6h),
-            // then serve everything we hold.
-            $this->rateService->ensureFullArchive();
-            $first = ExchangeRate::orderBy('date_iso')->value('date_iso');
+            // Serve everything already stored, and do NOT pull the archive from
+            // in here: that is a bulk download, and doing it on the request that
+            // draws the chart meant the "Todo" button could hang for as long as
+            // the network took -- worst of all with no connection, which is
+            // exactly when the user is waiting on a chart. The refresh button is
+            // the deliberate place for that work, and this view reports the span
+            // it really has instead of implying a history we may not hold.
+            $first = ExchangeRate::currency($currency)->orderBy('date_iso')->value('date_iso');
             $from = $first ?? $to;
         } else {
             $from = CarbonImmutable::today()->subDays(min((int) $range, 1500) - 1)->toDateString();
         }
 
         $generation = (int) Cache::get('rate-series:generation', 1);
-        $series = Cache::remember(
-            'rate-series:'.$generation.':'.$from.':'.$to,
+        $cacheKey = 'rate-series:'.$generation.':'.$currency.':'.$from.':'.$to;
+        [$series, $comparison] = Cache::remember(
+            $cacheKey,
             300,
-            fn () => $this->rateService->rateSeries($from, $to)
+            fn () => [
+                $this->rateService->rateSeries($from, $to, $currency),
+                $this->rateService->rateSeries($from, $to, $other),
+            ]
         );
 
         return response()->json([
             'from' => $from,
             'to' => $to,
             'series' => $series,
+            'comparison' => $comparison,
+            'currency' => $currency,
+            'comparison_currency' => $other,
             'first_date' => $series[0]['date'] ?? null,
         ]);
     }

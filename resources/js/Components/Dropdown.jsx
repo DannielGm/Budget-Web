@@ -1,6 +1,7 @@
 import { Transition } from '@headlessui/react';
 import { Link } from '@inertiajs/react';
 import { createContext, useContext, useState } from 'react';
+import useDismissOnBackButton from '@/hooks/useDismissOnBackButton';
 
 const DropDownContext = createContext();
 
@@ -10,6 +11,9 @@ const Dropdown = ({ children }) => {
     const toggleOpen = () => {
         setOpen((previousState) => !previousState);
     };
+
+    // Back closes the menu, the same as tapping the backdrop behind it.
+    useDismissOnBackButton(open, () => setOpen(false));
 
     return (
         <DropDownContext.Provider value={{ open, setOpen, toggleOpen }}>

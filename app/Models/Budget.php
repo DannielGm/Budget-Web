@@ -78,9 +78,24 @@ class Budget extends Model
     }
 
     /**
-     * Independent per-pool savings balances (USD). Each pool aggregates its
-     * manual SavingTransactions plus Transfer legs that move money in or out
-     * of that pool (source_type/destination_type === 'saving').
+     * A savings movement's currency, defaulting to dollars.
+     *
+     * Rows written before the column existed are dollars -- that is what they
+     * were -- so an absent value is not an unknown, it is USD.
+     */
+    public static function normalizeCurrency(?string $value): string
+    {
+        return strtoupper(trim((string) $value)) === 'EUR' ? 'EUR' : 'USD';
+    }
+
+    /**
+     * Independent per-pool savings balances, per currency.
+     *
+     * Each pool aggregates its manual SavingTransactions plus Transfer legs that
+     * move money in or out of that pool (source_type/destination_type ===
+     * 'saving'), keeping what was saved in dollars apart from what was saved in
+     * euros. A pool is not marked as one currency: the dollars and the euros you
+     * hold in the same place are two pots, each stated in its own unit.
      */
     public function getSavingsPoolsAttribute(): array
     {
@@ -89,37 +104,54 @@ class Budget extends Model
             $transfers = $this->transfers;
 
             return collect(self::SAVINGS_POOLS)->map(function (string $pool) use ($transactions, $transfers) {
-                $balance = '0';
+                $balances = ['USD' => '0', 'EUR' => '0'];
 
                 foreach ($transactions as $t) {
                     if (self::normalizeSavingsPool($t->category) !== $pool) {
                         continue;
                     }
-                    $balance = $t->type === 'deposit'
-                        ? bcadd($balance, $t->amount_usd, 2)
-                        : bcsub($balance, $t->amount_usd, 2);
+                    $currency = self::normalizeCurrency($t->currency);
+                    $balances[$currency] = $t->type === 'deposit'
+                        ? bcadd($balances[$currency], $t->amount_usd, 2)
+                        : bcsub($balances[$currency], $t->amount_usd, 2);
                 }
 
                 foreach ($transfers as $tr) {
+                    $currency = self::normalizeCurrency($tr->currency);
                     if ($tr->destination_type === 'saving' && self::normalizeSavingsPool($tr->destination_id) === $pool) {
-                        $balance = bcadd($balance, (string) $tr->amount_usd, 2);
+                        $balances[$currency] = bcadd($balances[$currency], (string) $tr->amount_usd, 2);
                     }
                     if ($tr->source_type === 'saving' && self::normalizeSavingsPool($tr->source_id) === $pool) {
-                        $balance = bcsub($balance, (string) $tr->amount_usd, 2);
+                        $balances[$currency] = bcsub($balances[$currency], (string) $tr->amount_usd, 2);
                     }
                 }
 
-                return ['name' => $pool, 'balance_usd' => $balance];
+                return [
+                    'name' => $pool,
+                    'balance_usd' => $balances['USD'],
+                    'balance_eur' => $balances['EUR'],
+                ];
             })->values()->all();
         });
     }
 
-    /** Total savings = the sum of the three independent pools. */
+    /** Total savings = the sum of the three pools, per currency. */
     public function getTotalSavingsUsdAttribute(): string
+    {
+        return $this->savingsTotalFor('balance_usd');
+    }
+
+    public function getTotalSavingsEurAttribute(): string
+    {
+        return $this->savingsTotalFor('balance_eur');
+    }
+
+    /** One currency's total across the three pools. */
+    private function savingsTotalFor(string $key): string
     {
         $total = '0';
         foreach ($this->savings_pools as $pool) {
-            $total = bcadd($total, $pool['balance_usd'], 2);
+            $total = bcadd($total, $pool[$key], 2);
         }
 
         return $total;

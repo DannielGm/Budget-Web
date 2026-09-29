@@ -163,4 +163,51 @@ class InsightsRouteTest extends TestCase
                 $this->assertEquals(25, (float) $transfers[0]['amount_usd']);
             });
     }
+
+    public function test_it_carries_the_effective_rate_and_both_series(): void
+    {
+        $this->seedMonth();
+
+        $this->get(route('insights', ['month' => self::MONTH]))
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $props = $page->toArray()['props'];
+
+                $this->assertArrayHasKey('effective', $props['rates']);
+                $this->assertArrayHasKey('latest', $props['rates']['usd']);
+                $this->assertArrayHasKey('day', $props['rates']['usd']);
+                $this->assertArrayHasKey('latest', $props['rates']['eur']);
+                $this->assertArrayHasKey('day', $props['rates']['eur']);
+                $this->assertArrayHasKey('isCustomRate', $props);
+
+                // `effective` is the budget form's value and is what every
+                // figure converts at, so it must be the stored income_rate
+                // rather than a BCV-derived number. The budget arrives
+                // serialised here, so it is read as an array.
+                $this->assertSame(
+                    (string) $props['budget']['income_rate'],
+                    (string) $props['rates']['effective'],
+                );
+            });
+    }
+
+    public function test_a_custom_rate_reaches_the_payload_unchanged(): void
+    {
+        $this->seedMonth();
+
+        $budget = Budget::where('month_id', self::MONTH)->firstOrFail();
+        $budget->update(['income_rate' => '36.50', 'is_custom_rate' => true]);
+
+        $this->get(route('insights', ['month' => self::MONTH]))
+            ->assertOk()
+            ->assertInertia(function ($page) {
+                $props = $page->toArray()['props'];
+
+                // The regression: the custom value used to be saved and then
+                // never displayed, because the payload offered a BCV-derived
+                // `month` and the frontend preferred it.
+                $this->assertSame('36.50', (string) $props['rates']['effective']);
+                $this->assertTrue($props['isCustomRate']);
+            });
+    }
 }

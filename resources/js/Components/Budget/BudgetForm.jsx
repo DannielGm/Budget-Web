@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Modal from '@/Components/Modal';
 import InputLabel from '@/Components/InputLabel';
 import TextInput from '@/Components/TextInput';
@@ -7,7 +7,8 @@ import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
-import { useForm, usePage } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
+import { useCurrency, EUR } from '@/lib/currency';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -17,8 +18,44 @@ function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-export default function BudgetForm({ show, onClose, budget }) {
-    const { rate } = usePage().props;
+/**
+ * What the "Tasa Diaria BCV" switch does to the form's rate.
+ *
+ * Pulled out of the component because the rule is the bug. The switch used to
+ * write the MONTH's rate, which is the first of the month carried forward, so a
+ * switch promising a daily figure wrote yesterday's number; and it used to be
+ * wired to the negation of is_custom_rate, so the box showed checked while the
+ * state it wrote meant "custom". Both were only observable by pressing it.
+ *
+ * A function makes them assertable. On = today's published rate for the series
+ * on screen. Off = keep what the user typed, which is the number they chose and
+ * the one that must survive a save.
+ *
+ * @param checked    the switch's new position: true means follow BCV daily
+ * @param dailyRate  today's published rate for the display series, 0 if unknown
+ * @param current    the rate in the form right now
+ */
+export function applyDailyRateSwitch(checked, dailyRate, current) {
+    if (!checked) return { is_custom_rate: true, income_rate: current };
+    if (!(Number(dailyRate) > 0)) return { is_custom_rate: false, income_rate: current };
+
+    return { is_custom_rate: false, income_rate: dailyRate };
+}
+
+export default function BudgetForm({ show, onClose, budget, rates = {},
+    layoutId = null,
+}) {
+    const currency = useCurrency();
+    // Today's published rate for the series on screen -- what the daily switch
+    // writes. `latest` is a real BCV observation; the form's own value is the
+    // month's, and writing that back would make the switch a no-op that looks
+    // like it did something.
+    //
+    // The rates arrive as a prop rather than from usePage(), so the form needs
+    // no page context and can be rendered on its own. Same reason the graph
+    // takes its rate as a prop: a component that reads only what it is given
+    // can be checked, and one that reaches for a global cannot.
+    const dailyRate = Number((currency === EUR ? rates?.eur : rates?.usd)?.latest) || 0;
     const { data, setData, patch, processing, errors, reset, clearErrors, transform } = useForm({
         income_bs: budget.income_bs || '0',
         income_rate: budget.income_rate || '0',
@@ -41,8 +78,17 @@ export default function BudgetForm({ show, onClose, budget }) {
         };
     });
 
+    // Seed when the form OPENS, not whenever `budget` changes identity.
+    //
+    // This also depended on `budget`, and Inertia hands over a fresh budget
+    // object after every response, so the effect re-ran on each one and reset
+    // the fields from the stored values. A toggle or a typed rate was therefore
+    // visibly applied and then silently reverted -- the switch lit up and the
+    // mark did not stick. The guard below seeds on the show transition only,
+    // so re-opening is still correct but an in-flight response is not.
+    const wasShown = useRef(false);
     useEffect(() => {
-        if (show) {
+        if (show && !wasShown.current) {
             setData({
                 income_bs: budget.income_bs,
                 income_rate: budget.income_rate,
@@ -52,12 +98,17 @@ export default function BudgetForm({ show, onClose, budget }) {
             setIsAdditive(false);
             setAdditiveAmount('');
         }
-    }, [show, budget]);
+        wasShown.current = show;
+    }, [show, budget, setData]);
 
     const handleFetchHistoricalRate = async (monthId, dayIso) => {
         if (!dayIso) return;
         try {
-            const response = await axios.get(route('exchange-rate.history'), { params: { date: dayIso } });
+            // Ask for the series actually on screen. Requesting dollars here and
+            // storing the answer in a euro screen would write a real but wrong
+            // rate into income_rate and flag it custom, which is exactly the bug
+            // the currency toggle would otherwise hide behind a correct symbol.
+            const response = await axios.get(route('exchange-rate.history'), { params: { date: dayIso, currency } });
             if (response.data?.rate && parseFloat(response.data.rate) > 0) {
                 // Update the form data with the fetched rate
                 setData(d => ({...d, income_rate: response.data.rate, is_custom_rate: true}));
@@ -86,7 +137,7 @@ export default function BudgetForm({ show, onClose, budget }) {
     };
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md">
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                   <div className="flex items-center justify-between mb-4">
                       <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
@@ -95,19 +146,17 @@ export default function BudgetForm({ show, onClose, budget }) {
                       <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 select-none">
                           <input
                               type="checkbox"
+                              // Checked means "follow today's BCV rate", which is
+                              // what the label says. It used to be the negation
+                              // of is_custom_rate, so the box showed checked
+                              // while the state it wrote was "custom" -- the
+                              // label and the meaning were crossed, which is why
+                              // the mark looked like it disagreed with the press.
                               checked={!data.is_custom_rate}
-                              onChange={(e) => {
-                                  // Checked means "use the latest daily BCV rate", which is exactly
-                                  // what the label promises. Unchecked means the typed value is a
-                                  // custom rate, and the typed value is kept either way.
-                                  setData(d => ({
-                                      ...d,
-                                      is_custom_rate: !e.target.checked,
-                                      ...(e.target.checked
-                                          ? { income_rate: rate?.rate || 0 }
-                                          : {}),
-                                  }));
-                              }}
+                              onChange={(e) => setData(d => ({
+                                  ...d,
+                                  ...applyDailyRateSwitch(e.target.checked, dailyRate, d.income_rate),
+                              }))}
                               className="h-4 w-4 shrink-0 cursor-pointer rounded border-gray-300 text-[#FF8A3D] focus:ring-[#FF8A3D] dark:border-gray-600 dark:bg-gray-900 dark:text-[#9B7BFF] dark:focus:ring-[#9B7BFF]"
                           />
                           <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-300">

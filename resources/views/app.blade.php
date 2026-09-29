@@ -3,6 +3,12 @@
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+        <!-- The Android status bar is painted by the system and does not read our
+             stylesheet, so without this it sits above a gradient header in a
+             colour of its own. useTheme keeps it in step with the light/dark
+             toggle, which the system setting cannot know about. -->
+        <meta name="theme-color" content="#FF8A3D">
+        <meta name="color-scheme" content="light dark">
 
         <!-- The CSRF token for the one form in this app the browser submits
              natively. Every other request goes through Inertia, which reads the
@@ -25,6 +31,11 @@
             } else {
                 document.documentElement.classList.remove('dark');
             }
+
+            // The display currency is read before React mounts so the first
+            // paint already carries the right symbol. Any value other than
+            // 'EUR' means dollars, which is the default.
+            window.displayCurrency = localStorage.currency === 'EUR' ? 'EUR' : 'USD';
         </script>
         @routes
         @viteReactRefresh

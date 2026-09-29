@@ -29,6 +29,7 @@ class BudgetService
                 'debt_bs',
                 'savings_pools',
                 'total_savings_usd',
+                'total_savings_eur',
             ]);
         }
         return $budget;
@@ -193,7 +194,10 @@ class BudgetService
                 'id' => $t->id,
                 'kind' => 'transaction',
                 'type' => $t->type,
-                'pool' => Budget::normalizeSavingsPool($t->category) ?? $t->category,   // line 173
+                'pool' => Budget::normalizeSavingsPool($t->category) ?? $t->category,
+                // Which pot the movement was saved in. The UI filters on this, so
+                // a dollar screen never has to guess what a stored amount is.
+                'currency' => Budget::normalizeCurrency($t->currency),
                 'amount_usd' => (string) $t->amount_usd,
                 'amount_bs' => (string) $t->amount_bs,
                 'exchange_rate' => (string) $t->exchange_rate,
@@ -214,6 +218,7 @@ class BudgetService
                 'source_id' => Budget::normalizeSavingsPool($tr->source_id),            // line 191
                 'destination_type' => $tr->destination_type,
                 'destination_id' => Budget::normalizeSavingsPool($tr->destination_id),
+                'currency' => Budget::normalizeCurrency($tr->currency),
                 'amount_usd' => (string) $tr->amount_usd,
                 'amount_bs' => (string) $tr->amount_bs,
                 'rate' => (string) $tr->rate,

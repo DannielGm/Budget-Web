@@ -3,6 +3,7 @@ import { RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtPct, fmtRate } from '@/lib/money';
+import { useRateLabel } from '@/hooks/useFigure';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -37,12 +38,21 @@ const longDate = (iso) => {
  * backward-carry rule already applied server-side: days with no BCV
  * publication inherit the closest earlier observation and arrive with
  * exact=false (drawn dashed in the chart / marked with ≈ in the list).
+ *
+ * The series on screen follows the display currency, and `comparison` carries
+ * the other one alongside it. Both are bolivares per one unit of their own
+ * currency, so they are the same unit and share one axis honestly -- a euro
+ * rate is not rescaled onto dollars to sit next to them.
  */
 export default function RateHistoryDashboard({
-    rate, points, loading, error, refreshing, range, onRangeChange, onRefresh, onRetry,
+    rate, points, comparison = null, currency, comparisonCurrency = null,
+    loading, error, refreshing, range, onRangeChange, onRefresh, onRetry,
 }) {
     const data = points || [];
+    const rateLabel = useRateLabel(currency);
+    const comparisonLabel = useRateLabel(comparisonCurrency);
     const last = data.length > 0 ? data[data.length - 1] : null;
+    const lastComparison = comparison && comparison.length > 0 ? comparison[comparison.length - 1] : null;
 
     // 1D / 7D / 30D movement against the last point (points are consecutive
     // days). 30D is the headline figure the hero must always carry, so it
@@ -92,6 +102,21 @@ export default function RateHistoryDashboard({
         onRefresh();
     };
 
+    // A range can only show what this device holds. The archive that fills the
+    // long windows is a bulk download that fails on a bad connection, and the
+    // euro series in particular can hold only a few months: "1A" and "Todo" then
+    // return the same truncated window and look broken. Saying where the data
+    // actually starts is the honest answer, and it tells the user why.
+    const coverage = useMemo(() => {
+        if (data.length === 0) return null;
+        const first = data[0].date;
+        const expected = range === 'all' ? null : Number(range);
+        // A day of slack absorbs weekends and holidays, which legitimately have
+        // no point of their own.
+        const complete = expected === null || data.length >= expected * 0.9;
+        return complete ? null : { from: first };
+    }, [data, range]);
+
     return (
         <div className="space-y-6">
             {/* Hero ticker */}
@@ -121,11 +146,20 @@ export default function RateHistoryDashboard({
 
                 <div className="relative z-10">
                     <p className="text-4xl font-black font-serif tracking-tight tabular">
-                        {last ? `Bs ${fmtRate(last.rate)}` : '—'}
+                        {last ? `${rateLabel} ${fmtRate(last.rate)}` : '—'}
                     </p>
                     <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mt-1">
                         {last ? `Último dato · ${longDate(last.date)}` : (rate?.date_iso ? longDate(rate.date_iso) : '')}
                     </p>
+
+                    {/* The other series, only when it was actually fetched. A
+                        euro history that has never backfilled shows nothing here
+                        rather than a flat line implying a rate nobody published. */}
+                    {lastComparison && (
+                        <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-white/45 tabular">
+                            {comparisonLabel} {fmtRate(lastComparison.rate)}
+                        </p>
+                    )}
                 </div>
 
                 {deltas.length > 0 && (
@@ -176,6 +210,12 @@ export default function RateHistoryDashboard({
                     ))}
                 </div>
             </div>
+
+            {coverage && (
+                <p className="px-1 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                    Datos disponibles desde {longDate(coverage.from)}
+                </p>
+            )}
             {/* Chart + stats */}
             {loading ? (
                 <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 space-y-3">
@@ -211,7 +251,7 @@ export default function RateHistoryDashboard({
                 </div>
             ) : (
                 <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4">
-                    <RateChart points={data} />
+                    <RateChart points={data} comparison={comparison} />
 
                     {stats && (
                         <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -314,18 +354,39 @@ export default function RateHistoryDashboard({
  * Hand-rolled SVG area chart — no recharts so the initial bundle stays lean.
  * Carried-forward (non-exact) segments are drawn dashed: the visual honesty
  * of the backward-carry rule.
+ *
+ * The comparison series is drawn over the same axis, thinner and dimmer. It is
+ * the same unit -- bolivares per unit of its own currency -- so sharing the
+ * axis is honest rather than a rescale: the vertical distance between the two
+ * lines is the real gap between a euro and a dollar at that date. The scale
+ * therefore has to span both, and each series keeps its own carry-dashing,
+ * because a day BCV published one and not the other is a fact about the data
+ * and not a rendering choice.
  */
-function RateChart({ points }) {
+function RateChart({ points, comparison = null }) {
     const W = 600;
     const H = 190;
     const PAD = { t: 18, r: 74, b: 30, l: 6 };
     const [hover, setHover] = useState(null);
+    const rateLabel = useRateLabel();
+
+    // The comparison is indexed by date rather than position: the two series
+    // are carried independently, so day 5 of one has no guaranteed day 5 of
+    // the other when one of them starts later.
+    const comparisonByDate = useMemo(
+        () => new Map((comparison || []).map((p) => [p.date, p])),
+        [comparison],
+    );
 
     const geom = useMemo(() => {
         if (points.length < 2) return null;
         const vals = points.map((p) => parseFloat(p.rate));
-        let min = Math.min(...vals);
-        let max = Math.max(...vals);
+
+        // The span covers both series, or the comparison would be drawn off the
+        // top or bottom of the plot whenever it sits above or below.
+        const all = [...vals, ...(comparison || []).map((p) => parseFloat(p.rate))].filter(Number.isFinite);
+        let min = Math.min(...all);
+        let max = Math.max(...all);
         if (max - min < 1e-9) {
             max += 1;
             min -= 1;
@@ -345,12 +406,33 @@ function RateChart({ points }) {
         }
         area += ` L ${x(points.length - 1)} ${H - PAD.b} L ${x(0)} ${H - PAD.b} Z`;
 
+        // The comparison is drawn only across the days it actually covers, so a
+        // series that has not been backfilled far enough shows a short line
+        // rather than a long one carried forward from nothing.
+        let compSolid = '';
+        let compDashed = '';
+        let compStart = null;
+        for (let i = 0; i < points.length; i++) {
+            const match = comparisonByDate.get(points[i].date);
+            if (!match) continue;
+            const v = parseFloat(match.rate);
+            if (!Number.isFinite(v)) continue;
+            if (compStart === null) {
+                compStart = i;
+                compSolid += `M ${x(i)} ${y(v)}`;
+                continue;
+            }
+            const seg = `M ${x(i - 1)} ${y(parseFloat(comparisonByDate.get(points[i - 1].date).rate))} L ${x(i)} ${y(v)}`;
+            if (match.exact) compSolid += seg;
+            else compDashed += seg;
+        }
+
         const gridVals = [min + span * 0.06, min + span * 0.5, max - span * 0.06];
         const last = points.length - 1;
         const tickIdx = [...new Set([0, Math.floor(last / 3), Math.floor((last * 2) / 3), last])];
 
-        return { x, y, solid, dashed, area, gridVals, tickIdx };
-    }, [points]);
+        return { x, y, solid, dashed, area, compSolid, compDashed, gridVals, tickIdx, hasComparison: compStart !== null };
+    }, [points, comparisonByDate]);
 
     if (!geom) {
         return <p className="text-center text-xs font-bold text-gray-400 py-8">Datos insuficientes para la gráfica</p>;
@@ -396,6 +478,20 @@ function RateChart({ points }) {
                 ))}
 
                 <path d={geom.area} fill="url(#rateAreaFill)" />
+                {/* The comparison sits under the primary line so the primary
+                    stays the figure the page is about. */}
+                {geom.hasComparison && (
+                    <>
+                        <path
+                            d={geom.compDashed} fill="none" stroke="var(--ink-3)" strokeWidth="1.5"
+                            strokeDasharray="3 4" strokeLinecap="round" opacity="0.5"
+                        />
+                        <path
+                            d={geom.compSolid} fill="none" stroke="var(--ink-3)" strokeWidth="1.75"
+                            strokeLinejoin="round" strokeLinecap="round" opacity="0.8"
+                        />
+                    </>
+                )}
                 <path
                     d={geom.solid} fill="none" stroke="var(--brand)" strokeWidth="2.5"
                     strokeLinejoin="round" strokeLinecap="round"
@@ -434,7 +530,7 @@ function RateChart({ points }) {
                     className="absolute top-0 bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-lg pointer-events-none tabular whitespace-nowrap"
                     style={{ left: `${Math.min(72, Math.max(0, (geom.x(hover) / W) * 100 - 14))}%` }}
                 >
-                    {shortDate(hp.date)} · Bs {fmtRate(hp.rate)}{hp.exact ? '' : ' ≈'}
+                    {shortDate(hp.date)} · {rateLabel} {fmtRate(hp.rate)}{hp.exact ? '' : ' ≈'}
                 </div>
             )}
         </div>

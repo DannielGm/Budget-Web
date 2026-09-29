@@ -3,6 +3,59 @@ import Modal from '@/Components/Modal';
 import { ArrowDownToLine, ArrowUpFromLine, Landmark, Wallet, Banknote, ArrowRightLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { convertBetween, currencySymbol, fmtForeign, potAmount, rateUnitLabel, useCurrency, USD, EUR } from '@/lib/currency';
+import { fmtBs, fmtUsd } from '@/lib/money';
+import { useRateInBs } from '@/hooks/useFigure';
+
+/** The two pots a pool holds, in the order they are stated. */
+const POTS = [USD, EUR];
+
+/** What a pot says when there is no rate to say it with. */
+const MISSING_RATE_NOTE = {
+    USD: 'Sin tasa BCV de dólares',
+    EUR: 'Sin tasa BCV de euros',
+};
+
+/**
+ * The line under a pot's amount: what it is worth in bolivars at the rate in
+ * use, the rate itself, and what the pot comes to in the currency on screen.
+ *
+ * Three rules, and each of them is a mistake this modal has shipped:
+ *
+ *  - The pot already in the display currency gets no line at all. It is the
+ *    figure, it is not converted, and a conversion line under it would be
+ *    describing a conversion that never happens.
+ *
+ *  - The rate printed is the rate the bolivar figure was multiplied by. They
+ *    used to be two different numbers, the second being an average of what the
+ *    pool happened to be funded at, so the line quoted a rate that was not the
+ *    one in the arithmetic above it.
+ *
+ *  - A series that has not loaded says so. An install with no euro rate prints
+ *    a note rather than nothing, so the missing line reads as explained instead
+ *    of broken.
+ *
+ * @param converted the pot read in the display currency, or null when it could
+ *                   not be converted; the line then drops its last part
+ * @returns the text, or null when this pot has no line
+ */
+export function potFootnote({ pot, displayCurrency, balance, rate, converted }) {
+    if (pot === displayCurrency) return null;
+
+    const factor = Number(rate) || 0;
+    if (factor <= 0) return MISSING_RATE_NOTE[pot] ?? MISSING_RATE_NOTE.USD;
+
+    const line = [
+        `≈ Bs ${fmtBs(balance * factor)}`,
+        `${factor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${rateUnitLabel(pot)}`,
+    ].join(' · ');
+
+    // The conversion hangs off the rate instead of becoming a third item, so the
+    // line reads as one statement: this much, at this rate, comes to that much.
+    return converted === null || converted === undefined
+        ? line
+        : `${line} = ${currencySymbol(displayCurrency)} ${fmtUsd(converted)}`;
+}
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -30,12 +83,17 @@ const formatDate = (ms) => new Date(ms).toLocaleDateString('es-ES');
  * Shows the pool's own balance plus only its movements (manual transactions
  * merged with transfers from/to cash).
  *
- * Savings pools may work with non-official rates, so the Bs equivalent is
- * derived from the pool's own incoming movements (weighted rate) instead of
- * the BCV rate. BCV is only used as a fallback when the pool has no incoming
- * movements yet.
+ * Each pot is stated in its own currency. The pot already in the currency on
+ * screen is the figure; the other one is the one being converted, and it says
+ * what it comes to under the line (see potFootnote).
  */
-export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [], savingsLedger = [], currentRate, onAddMovement, onEditMovement }) {
+export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [], savingsLedger = [], onAddMovement, onEditMovement }) {
+    // Both series, because each pot's rate line is its own currency's and the one
+    // that has not loaded must not borrow the other's.
+    const currency = useCurrency();
+    const usdRate = useRateInBs(USD);
+    const eurRate = useRateInBs(EUR);
+    const rates = { usdRate, eurRate };
     const Icon = POOL_ICONS[pool] || Wallet;
 
     // Movements of this pool only, latest first (the ledger is already sorted).
@@ -46,20 +104,26 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
 
     const isIncoming = (t) => (t.kind === 'transaction' ? t.type === 'deposit' : t.destination_id === pool);
 
-    // Weighted rate from the incoming movements (depósitos + transferencias entrantes).
-    const incoming = movements.filter(isIncoming).reduce((acc, t) => ({
-        bs: acc.bs + parseFloat(t.amount_bs || 0),
-        usd: acc.usd + parseFloat(t.amount_usd || 0),
-    }), { bs: 0, usd: 0 });
+    // A movement's own currency. Rows written before the column existed were
+    // dollars, which is what they were.
+    const potOf = (t) => t.currency || USD;
 
-    const derivedRate = incoming.usd > 0 ? incoming.bs / incoming.usd : 0;
-    const effectiveRate = derivedRate > 0 ? derivedRate : (parseFloat(currentRate) || 0);
+    // The rate in use for each pot, for the day or range on screen. Not an
+    // average of what the pool was funded at: every other savings surface values
+    // a pot at its own series rate, and a line that quotes one rate while
+    // multiplying by another is worse than no line.
+    const rateOf = (potCurrency) => (potCurrency === EUR ? eurRate : usdRate);
 
     // Backend is authoritative; fall back to netting this pool's ledger.
-    const netUsd = movements.reduce((acc, t) => acc + (isIncoming(t) ? 1 : -1) * parseFloat(t.amount_usd || 0), 0);
-    const backendBalance = (pools || []).find((p) => p.name === pool);
-    const balanceUsd = backendBalance ? parseFloat(backendBalance.balance_usd || 0) : netUsd;
-    const balanceBs = balanceUsd * effectiveRate;
+    const backendPool = (pools || []).find((p) => p.name === pool);
+    const balanceOf = (potCurrency) => (backendPool
+        ? potAmount(backendPool, potCurrency)
+        : movements.reduce(
+            (acc, t) => acc + (potOf(t) === potCurrency
+                ? (isIncoming(t) ? 1 : -1) * parseFloat(t.amount_usd || 0)
+                : 0),
+            0,
+        ));
 
     const title = (t) => (t.kind === 'transfer'
         ? (t.note || (isIncoming(t) ? 'Depósito' : 'Retiro'))
@@ -90,20 +154,45 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                                 <ArrowRightLeft size={18} />
                             </button>
                         </div>
-                        <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-1">
-                            Resumen del Mes · {POOL_LABELS[pool] || pool}
+                        <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mt-1 dark:text-gray-400">
+                            {POOL_LABELS[pool] || pool}
                         </p>
                     </div>
                 </div>
 
                 <div className="bg-gray-50 dark:bg-gray-800/50 rounded-2xl p-4 mb-6 border border-gray-100 dark:border-gray-800">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 font-bold mb-1">Total en Ahorros</p>
-                    <p className="text-3xl font-black font-serif text-gray-900 dark:text-white tracking-tight">
-                        $ {balanceUsd.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                    </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase tracking-wider mt-1">
-                        Bs {balanceBs.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
-                    </p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 font-bold mb-2">Total en Ahorros</p>
+
+                    {POTS.filter((pot) => balanceOf(pot) !== 0).length === 0 ? (
+                        <p className="text-sm text-gray-400 dark:text-gray-500 font-bold">Sin saldo en este fondo</p>
+                    ) : (
+                        POTS.filter((pot) => balanceOf(pot) !== 0).map((pot) => {
+                            const balance = balanceOf(pot);
+                            // Only the pot that is not already in the currency on
+                            // screen is converted, and both sides of that
+                            // conversion come from the same day.
+                            const footnote = potFootnote({
+                                pot,
+                                displayCurrency: currency,
+                                balance,
+                                rate: rateOf(pot),
+                                converted: convertBetween(balance, pot, currency, rates),
+                            });
+
+                            return (
+                                <div key={pot} className="mb-1 last:mb-0">
+                                    <p className="text-2xl font-black font-serif text-gray-900 dark:text-white tracking-tight">
+                                        {currencySymbol(pot)} {balance.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                    </p>
+                                    {footnote ? (
+                                        <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
+                                            {footnote}
+                                        </p>
+                                    ) : null}
+                                </div>
+                            );
+                        })
+                    )}
                 </div>
 
                 <div className="mb-4">
@@ -147,7 +236,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                                             'font-black text-sm',
                                             incoming ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                                         )}>
-                                            {incoming ? '+' : '-'} $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                            {incoming ? '+' : '-'} {fmtForeign(t.amount_usd, potOf(t))}
                                         </p>
                                         <p className="text-[10px] text-gray-400 font-bold">
                                             Bs {parseFloat(t.amount_bs || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}

@@ -1,19 +1,31 @@
 import React from 'react';
-import { ArrowDownToLine, ArrowUpFromLine, Landmark, Wallet, Banknote, History, ArrowRightLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowDownToLine, ArrowUpFromLine, Landmark, History, ArrowRightLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd } from '@/lib/money';
 import useFitText from '@/hooks/useFitText';
+import { inWindow } from '@/lib/scopedMoney';
+import { n } from '@/lib/debtMath';
+import { fmtForeign, potAmount, useCurrency, EUR, USD } from '@/lib/currency';
+import { useCurrencySymbol, useFigure, useRateLabel } from '@/hooks/useFigure';
+import SavingsPoolSummaryStrip from '@/Components/Budget/SavingsPoolSummaryStrip';
+
+const isoOf = (ms) => {
+    const d = new Date(Number(ms) || 0);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-const CAT_ICONS = {
-    Digital: <Wallet size={20} className="text-violet-400" />,
-    Bank: <Landmark size={20} className="text-blue-500" />,
-    Physical: <Banknote size={20} className="text-green-500" />
-};
+/** Carries the shared layout id only while this form is open, so the id is
+ *  never held by two elements at once. */
+function TransferTrigger({ layoutId, children }) {
+    if (!layoutId) return children;
+    return <motion.div layoutId={layoutId} className="shrink-0">{children}</motion.div>;
+}
 
 const POOL_LABELS = { Digital: 'Digital', Bank: 'Banco', Physical: 'Físico' };
 
@@ -24,37 +36,6 @@ const partLabel = (type, id) => {
     return id || 'Categoría';
 };
 
-
-/**
- * A single savings pool. Extracted into its own component because the fit
- * search is a hook and cannot be called from the parent's .map callback.
- */
-function PoolTile({ name, balanceUsd, rate, onSelect }) {
-    const [bsRef, bsSize] = useFitText({ min: 8, max: 10 });
-
-    return (
-        <div
-            onClick={() => onSelect?.(name)}
-            title={`Ver movimientos de ${POOL_LABELS[name] || name}`}
-            className="bg-black/20 rounded-xl px-2 py-3.5 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-black/40 active:scale-95 transition-all"
-        >
-            <div className="mb-2 bg-white/5 p-2 rounded-full">
-                {CAT_ICONS[name]}
-            </div>
-            <span className="text-[10px] uppercase font-bold text-white/60 tracking-wider mb-1">{POOL_LABELS[name] || name}</span>
-            <span className="text-sm font-black tabular">
-                $ {fmtUsd(balanceUsd)}
-            </span>
-            <span
-                ref={bsRef}
-                style={{ fontSize: `${bsSize}px` }}
-                className="mt-1 block text-[10px] whitespace-nowrap font-medium leading-none text-white/60 tabular"
-            >
-                &asymp; Bs {fmtBs(Number(balanceUsd || 0) * Number(rate || 0))}
-            </span>
-        </div>
-    );
-}
 
 /** The "Deposito - Ahorro -> Banco" style tag, kept on a single line. */
 function MovementTag({ children, className }) {
@@ -75,7 +56,11 @@ function MovementTag({ children, className }) {
 }
 
 /** The Bs-denominated line under a movement amount, kept on a single line. */
-function BsRateLine({ value }) {
+function BsRateLine({ value, currency }) {
+    // The rate on a savings movement is Bs per unit of the pot's own currency.
+    // It travels with the movement because a pool holds both, and a euro
+    // movement labelled with the dollar series would be as wrong as its figure.
+    const rateLabel = useRateLabel(currency);
     const [ref, size] = useFitText({ min: 8, max: 10 });
 
     return (
@@ -84,26 +69,50 @@ function BsRateLine({ value }) {
             style={{ fontSize: `${size}px` }}
             className="text-[10px] whitespace-nowrap leading-none font-bold text-gray-400 tabular"
         >
-            {value} Bs/$
+            {value} {rateLabel}
         </p>
     );
 }
 
-export default function SavingsDashboard({ budget, savingsLedger = [], onAddSaving, onTransfer, onSelectPool, onEditTransfer }) {
+export default function SavingsDashboard({ budget, savingsLedger = [], dateFilter = null, rangeDays = 30, onAddSaving, onTransfer, onEditTransfer, transferLayoutId = null, summaryUrl = null }) {
+    const currency = useCurrency();
+
     // Independent pool balances from the backend (transactions + transfers).
     const pools = (budget.savings_pools && budget.savings_pools.length)
         ? budget.savings_pools
-        : ['Digital', 'Bank', 'Physical'].map((name) => ({ name, balance_usd: '0' }));
+        : ['Digital', 'Bank', 'Physical'].map((name) => ({ name, balance_usd: '0', balance_eur: '0' }));
 
     // Unified, chronologically merged history (manual transactions + transfers).
-    const entries = savingsLedger;
+    // Pool balances stay as they are: a balance is a balance, not a day's spend,
+    // and shrinking it would misrepresent what the user actually holds. The
+    // movement HISTORY is range filtered, because that list is what reads as
+    // "what happened" and showing a whole month under a day filter misleads.
+    // This screen states one pot: the one the currency on screen is saved in. A
+    // pool holds dollars and euros separately, and a dollar screen that added
+    // both up would be stating a euro balance in dollars. The strip underneath is
+    // where the two are combined.
+    const total = Number(
+        budget[currency === EUR ? 'total_savings_eur' : 'total_savings_usd']
+            ?? pools.reduce((acc, p) => acc + potAmount(p, currency), 0),
+    );
 
-    const totalUsd = budget.total_savings_usd != null
-        ? budget.total_savings_usd
-        : pools.reduce((acc, p) => acc + parseFloat(p.balance_usd || 0), 0);
+    const entries = (savingsLedger || []).filter((entry) => {
+        if ((entry.currency || USD) !== currency) return false;
+        if (!dateFilter) return true;
+        return inWindow(isoOf(n(entry.timestamp)), dateFilter, rangeDays);
+    });
 
-    const totalDisplay = fmtUsd(totalUsd);
-    const totalBs = Number(budget.income_rate) > 0 ? Number(totalUsd || 0) * Number(budget.income_rate) : 0;
+    const symbol = useCurrencySymbol();
+    // A pot already in the currency on screen is not converted: the amount the
+    // user stated is the figure. Its bolivar line is the app's own rate for the
+    // day or range, which is the one every other bolivar figure here divides by.
+    const { rate: displayRate } = useFigure();
+    const totalBs = total * displayRate;
+    // 48px, like every other hero in the app, so the same kind of figure is the
+    // same size on every screen. The search only steps down when the total would
+    // otherwise overflow the card, which a long savings figure used to simply do:
+    // the size was fixed and nothing measured it.
+    const [totalRef, totalSize] = useFitText({ min: 30, max: 48, emergencyMin: 22 });
 
     return (
         <div className="space-y-6">
@@ -112,43 +121,50 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                     <Landmark size={120} />
                 </div>
 
-                <div className="flex justify-between items-center mb-2 relative z-10">
-                    <span className="text-white/80 text-sm font-medium uppercase tracking-widest">Ahorro Total</span>
-                    <div className="flex gap-2">
-                    <button
-                        onClick={onTransfer}
-                        className="bg-white/10 hover:bg-white/20 p-2 rounded-xl backdrop-blur-md transition-colors"
-                        title="Depósito / Retiro"
-                    >
-                        <ArrowRightLeft size={20} />
-                    </button>
+                <div className="flex justify-between items-center mb-2 relative z-10 gap-2">
+                    <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-white/80 sm:text-sm sm:tracking-widest">
+                        {/* The name, not the code: the switch in the header and in
+                            Settings says "Dólares". */}
+                        Ahorro Total · {currency === EUR ? 'Euros' : 'Dólares'}
+                    </span>
+                    <div className="flex shrink-0 gap-2">
+                    <TransferTrigger layoutId={transferLayoutId}>
+                        {/* A labelled control, not an icon alone: this is the only
+                            way to add savings anywhere in the app, and a bare
+                            ArrowRightLeft is invisible on a phone. */}
+                        <button
+                            onClick={onTransfer}
+                            className="flex items-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white backdrop-blur-md transition-colors hover:bg-white/20 focus-visible:ring-2 focus-visible:ring-white/80"
+                            title="Depósito / Retiro"
+                        >
+                            <ArrowRightLeft size={18} aria-hidden="true" />
+                            <span className="hidden sm:inline">Depósito / Retiro</span>
+                        </button>
+                    </TransferTrigger>
 
                     </div>
                 </div>
 
                 <div className="relative z-10">
-                    <h1 className="text-5xl font-black font-serif tracking-tight">
-                        $ {totalDisplay}
+                    <h1
+                        ref={totalRef}
+                        style={{ fontSize: `${totalSize}px` }}
+                        className="whitespace-nowrap text-5xl font-black font-serif tracking-tight tabular"
+                    >
+                        {symbol} {fmtUsd(total)}
                     </h1>
-                    <p className="text-white/70 text-sm font-bold mt-1">
-                        ≈ Bs {fmtBs(totalBs)}
-                    </p>
+                    {displayRate > 0 ? (
+                        <p className="text-white/70 text-sm font-bold mt-1">
+                            ≈ Bs {fmtBs(totalBs)}
+                        </p>
+                    ) : null}
                 </div>
 
-                <div className="h-px bg-white/10 my-4 relative z-10" />
-
-                <div className="-mx-1 grid grid-cols-3 gap-2 relative z-10">
-                    {pools.map(({ name, balance_usd }) => (
-                        <PoolTile
-                            key={name}
-                            name={name}
-                            balanceUsd={balance_usd}
-                            rate={budget.income_rate}
-                            onSelect={onSelectPool}
-                        />
-                    ))}
-                </div>
             </div>
+
+            {summaryUrl ? (
+                <SavingsPoolSummaryStrip pools={pools} summaryUrl={summaryUrl} />
+            ) : null}
 
             <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors">
                 <div className="flex items-center gap-2 mb-4">
@@ -160,7 +176,9 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
 
                 <div className="space-y-3">
                     {entries.length === 0 ? (
-                        <p className="text-center text-sm text-gray-400 font-bold py-6">Sin movimientos registrados</p>
+                        <p className="text-center text-sm text-gray-400 font-bold py-6">
+                            Sin movimientos en {currency === EUR ? 'euros' : 'dólares'}
+                        </p>
                     ) : (
                         entries.map((t) => t.kind === 'transfer' ? (
                             <div
@@ -195,9 +213,9 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                 </div>
                                 <div className="shrink-0 text-right">
                                     <p className="font-black text-sm text-blue-600 dark:text-blue-400">
-                                        $ {parseFloat(t.amount_usd || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                        {fmtForeign(t.amount_usd, t.currency || USD)}
                                     </p>
-                                    <BsRateLine value={parseFloat(t.rate || 0).toLocaleString('es-ES')} />
+                                    <BsRateLine value={parseFloat(t.rate || 0).toLocaleString('es-ES')} currency={t.currency || USD} />
                                 </div>
                             </div>
                         ) : (
@@ -224,9 +242,9 @@ export default function SavingsDashboard({ budget, savingsLedger = [], onAddSavi
                                         </div>
                                         <div className="shrink-0 text-right">
                                             <p className={cn("font-black text-sm", isDeposit ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
-                                                {isDeposit ? '+' : '-'} $ {parseFloat(t.amount_usd).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                                {isDeposit ? '+' : '-'} {fmtForeign(t.amount_usd, t.currency || USD)}
                                             </p>
-                                            <BsRateLine value={parseFloat(t.exchange_rate).toLocaleString('es-ES')} />
+                                            <BsRateLine value={parseFloat(t.exchange_rate).toLocaleString('es-ES')} currency={t.currency || USD} />
                                         </div>
                                     </div>
                                 );

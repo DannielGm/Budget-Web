@@ -3,13 +3,16 @@ import { router } from '@inertiajs/react';
 import { motion } from 'framer-motion';
 import { fmtBs, fmtUsd } from '@/lib/money';
 import useFitText from '@/hooks/useFitText';
+import { useCurrencySymbol, useBolivarFigure } from '@/hooks/useFigure';
 
 // Shared with the insights panel so the strip and the screen it opens agree on
 // how the surface grows out of, and tucks back into, this one element.
 export const PANEL_SPRING = { type: 'spring', stiffness: 260, damping: 26 };
 
 function SummaryItem({ label, amountBs, rate, align = 'left' }) {
-    const usd = Number(rate) > 0 ? Number(amountBs || 0) / Number(rate) : 0;
+    const symbol = useCurrencySymbol();
+    const foreign = useBolivarFigure();
+    const usd = foreign(amountBs, rate);
     const [bsRef, bsSize] = useFitText({ min: 10, max: 16 });
     const [usdRef, usdSize] = useFitText({ min: 8, max: 11 });
 
@@ -30,7 +33,7 @@ function SummaryItem({ label, amountBs, rate, align = 'left' }) {
                 style={{ fontSize: `${usdSize}px` }}
                 className="whitespace-nowrap font-medium leading-tight tabular text-gray-400 dark:text-gray-500"
             >
-                &asymp; $ {fmtUsd(usd)}
+                &asymp; {fmtUsd(usd)} {symbol}
             </p>
         </div>
     );

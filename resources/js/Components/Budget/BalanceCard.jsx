@@ -4,33 +4,37 @@ import { useForm } from '@inertiajs/react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtBs, fmtUsd } from '@/lib/money';
-import { calculateCashExpenses } from '@/lib/budgetExpenses';
+import { scopeMonth, heroBalance } from '@/lib/scopedMoney';
+import { useFigure, useRateLabel } from '@/hooks/useFigure';
 import useFitText from '@/hooks/useFitText';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
 }
 
-export default function BalanceCard({ budget, contextRate, rate = null, dateFilter = null, onEdit }) {
+export default function BalanceCard({
+    budget,
+    contextRate,
+    rate = null,
+    dateFilter = null,
+    rangeDays = 30,
+    savingsLedger = [],
+    onEdit,
+}) {
     const { post, processing } = useForm();
 
- const cashExpenses = calculateCashExpenses(budget, dateFilter);
+    // scopeMonth is the single definition of the balance for the active range.
+    // This card used to compute `opening + income - cash` on its own for a day,
+    // which ignored credit purchases, debt payments, savings and transfers and
+    // so overstated the day. With no filter it returns the server's figure.
+    const scoped = scopeMonth(budget, { savingsLedger, dateFilter, rangeDays });
+    const balanceBs = heroBalance(budget, { savingsLedger, dateFilter, rangeDays });
 
-    // Aligned with the server: without a date filter use the official
-    // available_balance_bs (includes debt payments, deposits, withdrawals
-    // and transfers). With a date filter, keep the day-snapshot calculation
-    // (opening + income - cash up to that date).
-    const balanceBs = dateFilter
-        ? parseFloat(budget.opening_balance_bs) + parseFloat(budget.income_bs) - cashExpenses
-        : parseFloat(budget.available_balance_bs);
-
-    const effectiveRate = dateFilter
-        ? Number(contextRate)
-        : Number(budget.income_rate);
-
-    const balanceUsd = effectiveRate > 0
-        ? balanceBs / effectiveRate
-        : 0;
+    // The equivalent follows the display currency and the range's rate. Passing
+    // the balance in, rather than dividing here, keeps this card from owning a
+    // second rate rule.
+    const { formatted: balanceForeign, rate: displayRate } = useFigure({ amountBs: balanceBs });
+    const rateLabel = useRateLabel();
 
     // Preferred size matches SavingsDashboard (text-5xl = 48px) and
     // RateHistoryDashboard (text-4xl). The fit search only pulls the
@@ -62,7 +66,7 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
                 <h1
                     ref={bsRef}
                     style={{ fontSize: `${bsSize}px` }}
-                    className="whitespace-nowrap text-5xl font-black font-serif tracking-tight tabular"
+                    className="whitespace-nowrap text-5xl font-black font-serif tracking-tight tabular text-white"
                 >
                     Bs {fmtBs(balanceBs)}
                 </h1>
@@ -72,11 +76,11 @@ export default function BalanceCard({ budget, contextRate, rate = null, dateFilt
                         style={{ fontSize: `${usdSize}px` }}
                         className="min-w-0 whitespace-nowrap font-bold leading-tight text-white/75 tabular"
                     >
-                        ≈ $ {fmtUsd(balanceUsd)}
+                        ≈ {balanceForeign}
                     </p>
                     <div className="flex shrink-0 items-center gap-1.5">
                         <span className="whitespace-nowrap rounded-lg bg-white/10 px-2 py-1 text-[10px] font-bold tracking-wide text-white/70 tabular">
-                            {fmtBs(effectiveRate)} Bs/USD
+                            {fmtBs(displayRate)} {rateLabel}
                         </span>
                         {rate?.error && (
                             <span

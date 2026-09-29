@@ -48,3 +48,90 @@ export function unassignedCreditPurchases(debts = [], globalCreditPurchasesBs = 
     );
     return Math.max(0, n(globalCreditPurchasesBs) - assigned);
 }
+
+/** End-of-day cutoff in ms for a YYYY-MM-DD string, inclusive. */
+export const endOfDay = (dateIso) => new Date(`${dateIso}T23:59:59.999`).getTime();
+
+const atOrBefore = (timestamp, cutoff) => n(timestamp) > 0 && n(timestamp) <= cutoff;
+
+/**
+ * The state of every debt as of a given day.
+ *
+ * The stored `payment_bs` / `credit_expenses_bs` are month totals, so showing
+ * them in a day view would report the whole month as though it were that day.
+ * Both are recoverable from timestamped rows that are already in the payload:
+ * payments from `debts.payments`, and charges from the expense rows the
+ * backend's own credit-charges accessor already sums.
+ *
+ * A null `dateFilter` means "the whole month", which returns the stored totals
+ * untouched so the month view is bit-for-bit what it was.
+ */
+export function debtsAsOf(debts = [], dateFilter = null, budget = {}) {
+    if (!dateFilter) return debts;
+
+    const cutoff = endOfDay(dateFilter);
+    const expenses = budget.expenses || [];
+    const categories = budget.categories || [];
+    const categoryByName = new Map(categories.map((c) => [c.name, c]));
+
+    return debts.map((debt) => {
+        // Categories attached to this debt name it as the source of its charges.
+        const debtCategoryNames = new Set(
+            categories
+                .filter((c) => c.debt_id === debt.id)
+                .map((c) => c.name),
+        );
+        // Older rows predate the explicit link, so fall back to matching by name.
+        const byName = new Set(
+            (debt.categories || []).map((c) => c.name ?? c),
+        );
+        const names = debtCategoryNames.size ? debtCategoryNames : byName;
+
+        const chargesAsOf = expenses
+            .filter((e) => names.has(e.category_name))
+            .filter((e) => atOrBefore(e.timestamp, cutoff))
+            .reduce((sum, e) => sum + n(e.amount_bs), 0);
+
+        const paidAsOf = (debt.payments || [])
+            .filter((p) => atOrBefore(p.timestamp, cutoff))
+            .reduce((sum, p) => sum + n(p.amount_bs), 0);
+
+        return {
+            ...debt,
+            payment_bs: paidAsOf,
+            credit_expenses_bs: chargesAsOf,
+        };
+    });
+}
+
+/**
+ * Total credit purchases as of a day.
+ *
+ * Mirrors the backend exactly: cash is `cash_expense && !is_presupuesto`, so
+ * credit is the complement of that pair. Getting this wrong would silently
+ * disagree with `Budget::credit_purchases_bs` on the month view.
+ */
+export function creditPurchasesAsOf(budget = {}, dateFilter = null) {
+    if (!dateFilter) return n(budget.credit_purchases_bs);
+
+    const cutoff = endOfDay(dateFilter);
+    const categoryByName = new Map(
+        (budget.categories || []).map((c) => [c.name, c]),
+    );
+
+    return (budget.expenses || [])
+        .filter((e) => {
+            const category = categoryByName.get(e.category_name);
+            if (!category) return false;
+            // Mirrors Budget::getCreditPurchasesBsAttribute exactly: credit is
+            // a non-cash, non-plan category that is NOT attached to a debt.
+            // Omitting the debt_id check double counts a debt's charges, since
+            // those are also the debt's own current charges.
+            if (category.cash_expense) return false;
+            if (category.is_presupuesto) return false;
+            if (category.debt_id !== null && category.debt_id !== undefined) return false;
+            return true;
+        })
+        .filter((e) => atOrBefore(e.timestamp, cutoff))
+        .reduce((sum, e) => sum + n(e.amount_bs), 0);
+}

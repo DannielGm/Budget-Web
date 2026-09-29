@@ -3,7 +3,7 @@ import { Head, router, usePage } from '@inertiajs/react';
 import React, { useEffect, useState } from 'react';
 import BackupCard from '@/Pages/Settings/Partials/BackupCard';
 import StorageCard from '@/Pages/Settings/Partials/StorageCard';
-import { Home } from 'lucide-react';
+import CurrencyToggle from '@/Pages/Settings/Partials/CurrencyToggle';
 
 /**
  * How often the page re-reads itself while a pick is outstanding, and for how
@@ -103,21 +103,17 @@ export default function Settings() {
     return (
         <AuthenticatedLayout
             header={
-                <div className="flex items-center gap-3 px-4 sm:px-0">
-                    {/* Same control the dashboard header uses for "Ir a hoy", so the way
-                        back feels like part of the app rather than an afterthought. */}
-                    <a
-                        href={route('dashboard')}
-                        className="header-icon-button bg-white/15 hover:bg-white/25"
-                        title="Volver al dashboard"
-                        aria-label="Volver al dashboard"
-                    >
-                        <Home size={20} aria-hidden="true" />
-                    </a>
-                    <h2 className="text-3xl font-black font-serif text-white uppercase tracking-tight">
-                        Configuración
-                    </h2>
-                </div>
+                <AppHeader
+                    title="Configuración"
+                    back={{
+                        href: route('dashboard'),
+                        label: 'Volver al dashboard',
+                        icon: 'home',
+                    }}
+                    // This IS the settings screen, so the overflow menu keeps the theme
+                    // row and drops the row that would navigate here.
+                    showSettings={false}
+                />
             }
         >
             <Head title="Configuración" />
@@ -135,6 +131,8 @@ export default function Settings() {
                     onExport={handleExport}
                     onPick={handlePickFile}
                 />
+
+                <CurrencyToggle />
 
                 <StorageCard months={months} />
 

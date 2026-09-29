@@ -4,6 +4,7 @@
  * debtMath.js.
  */
 import { calculateDebt, n } from '@/lib/debtMath';
+import { EUR, USD } from '@/lib/currency';
 
 const n0 = (value) => Number(value) || 0;
 
@@ -39,7 +40,7 @@ const isoOf = (timestamp) => {
 /** Cash categories are the ones the balance card already counts as spending. */
 const isCashCategory = (c) => c.cash_expense && !c.is_presupuesto;
 
-export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, todayIso = '' } = {}) {
+export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, todayIso = '', currency = USD } = {}) {
     const categories = budget.categories || [];
     const expenses = budget.expenses || [];
 
@@ -117,7 +118,14 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
      * balance graph already uses: money landing in a pool is a deposit, money
      * leaving one is a withdrawal, whichever record shape carries it.
      */
-    const savingsFlowUsd = (entry) => {
+    // A pool holds dollars and euros in separate pots, so this screen counts only
+    // the pot the currency on screen is saved in: adding a euro deposit to a
+    // dollar total would be a number in no currency at all. Rows written before
+    // the pot was marked are dollars, which is what they were.
+    const isThisPot = (entry) => (entry.currency || USD) === currency;
+
+    const savingsFlow = (entry) => {
+        if (!isThisPot(entry)) return 0;
         if (entry.kind === 'transfer') {
             if (entry.destination_type === 'saving') return n(entry.amount_usd);
             if (entry.source_type === 'saving') return -n(entry.amount_usd);
@@ -126,18 +134,19 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
         return entry.type === 'deposit' ? n(entry.amount_usd) : -n(entry.amount_usd);
     };
 
-    let netSavingsUsd = 0;
-    for (const entry of monthLedger) netSavingsUsd += savingsFlowUsd(entry);
-    const depositsUsd = monthLedger
-        .filter((entry) => savingsFlowUsd(entry) > 0)
-        .reduce((s, entry) => s + savingsFlowUsd(entry), 0);
-    const withdrawalsUsd = monthLedger
-        .filter((entry) => savingsFlowUsd(entry) < 0)
-        .reduce((s, entry) => s - savingsFlowUsd(entry), 0);
+    let netSavings = 0;
+    for (const entry of monthLedger) netSavings += savingsFlow(entry);
+    const deposits = monthLedger
+        .filter((entry) => savingsFlow(entry) > 0)
+        .reduce((s, entry) => s + savingsFlow(entry), 0);
+    const withdrawals = monthLedger
+        .filter((entry) => savingsFlow(entry) < 0)
+        .reduce((s, entry) => s - savingsFlow(entry), 0);
 
     const incomeUsd = n0(rate) > 0 ? incomeBs / n0(rate) : 0;
-    const savingsRatePct = incomeUsd > 0 ? (netSavingsUsd / incomeUsd) * 100 : 0;
-    const savingsTotalUsd = (budget.savings_pools || []).reduce((s, p) => s + n(p.balance_usd), 0);
+    const savingsRatePct = incomeUsd > 0 ? (netSavings / incomeUsd) * 100 : 0;
+    const potKey = currency === EUR ? 'balance_eur' : 'balance_usd';
+    const savingsTotal = (budget.savings_pools || []).reduce((s, p) => s + n(p[potKey]), 0);
 
     // How much of the available balance this month's plan commits.
     const availableBalanceBs = n0(budget.available_balance_bs);
@@ -181,7 +190,7 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
         openingBs, total, elapsed, burnBs, projectedCashBs, projectedClosingBs,
         composition, planTotalBs, planRows, availableBalanceBs, planAgainstAvailablePct, planFitsBalance,
         debts: calculated, remainingBs, paidBs, chargesBs, debtBaseBs, debtPaidPct,
-        depositsUsd, withdrawalsUsd, netSavingsUsd, savingsRatePct, savingsTotalUsd, incomeUsd,
+        deposits, withdrawals, netSavings, savingsRatePct, savingsTotal, incomeUsd,
         activity,
     };
 }
