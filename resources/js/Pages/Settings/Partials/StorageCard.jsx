@@ -5,11 +5,13 @@ import { Card } from './BackupCard';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { CalendarDays, Database, Trash2 } from 'lucide-react';
 
-const pad = (value) => String(value).padStart(2, '0');
-const prettyIso = (iso) => {
-    const [y, m, d] = iso.split('-');
-    return `${d}/${m}/${y}`;
-};
+/** "d/m/yyyy" for a YYYY-MM-DD day key, via Intl.
+ *
+ *  Parsed as a plain date and formatted at noon, so a day is never rendered in
+ *  the neighbouring one by a timezone offset -- the key carries no time and no
+ *  zone, and reading it as UTC is how that goes wrong. */
+const prettyFormat = new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'numeric', year: 'numeric' });
+const prettyIso = (iso) => prettyFormat.format(new Date(`${iso}T12:00:00`));
 
 /**
  * Deleting what is stored on the device: one day, one month, or all of it.
@@ -93,9 +95,12 @@ export default function StorageCard({ months = [] }) {
         <Card icon={Trash2} title="Almacenamiento" subtitle="Borra los datos guardados en este dispositivo.">
             <div className="mt-4 space-y-4">
                 <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                    {/* A <label> for a <button> labels nothing, so it announced
+                        as a stranded caption. The button below carries the day
+                        it is set to, which is its own name. */}
+                    <p className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
                         Borrar un día
-                    </label>
+                    </p>
                     <div className="flex gap-2">
                         <button
                             type="button"
@@ -104,7 +109,7 @@ export default function StorageCard({ months = [] }) {
                             className="flex flex-1 items-center justify-between gap-2 rounded-lg border border-gray-300 dark:border-gray-600 dark:bg-gray-700 px-3 py-2 text-left text-sm font-medium dark:text-white"
                         >
                             <span className={dayIso ? 'tabular' : 'text-gray-400 dark:text-gray-500'}>
-                                {dayIso ? prettyIso(dayIso) : 'Elegir fecha...'}
+                                {dayIso ? prettyIso(dayIso) : 'Elegir fecha…'}
                             </span>
                             <CalendarDays size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
                         </button>
@@ -121,16 +126,17 @@ export default function StorageCard({ months = [] }) {
 
                 {months.length > 0 && (
                     <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
+                        <label htmlFor="clear-month-select" className="block text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1">
                             Borrar un mes
                         </label>
                         <div className="flex gap-2">
                             <select
+                                id="clear-month-select"
                                 value={monthId}
                                 onChange={(event) => setMonthId(event.target.value)}
                                 className="flex-1 rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-sm"
                             >
-                                <option value="">Seleccionar mes...</option>
+                                <option value="">Seleccionar mes…</option>
                                 {months.map((month) => (
                                     <option key={month.month_id} value={month.month_id}>
                                         {month.month_label}
@@ -155,10 +161,10 @@ export default function StorageCard({ months = [] }) {
                     type="button"
                     onClick={clearAll}
                     disabled={busy}
-                    className="w-full py-3 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white rounded-xl text-sm font-bold shadow-lg transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                    className="w-full py-3 bg-red-700 hover:bg-red-800 disabled:bg-gray-400 text-white rounded-xl text-sm font-bold shadow-lg transition-colors uppercase tracking-widest flex items-center justify-center gap-2"
                 >
                     <Trash2 size={16} aria-hidden="true" />
-                    Borrar Todo
+                    Borrar todo
                 </button>
 
                 <p className="flex items-start gap-1.5 text-[11px] leading-4 text-gray-400 dark:text-gray-500">

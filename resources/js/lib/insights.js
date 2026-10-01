@@ -1,14 +1,15 @@
-/**
+
+﻿/**
  * Derivations behind the "Análisis" screen. Pure functions so every figure can
  * be unit tested without mounting React, matching budgetExpenses.js and
  * debtMath.js.
  */
-import { calculateDebt, isCreditExpense, n } from '@/lib/debtMath';
+import { isoOfTimestamp } from '@/lib/localDate';
+import { calculateDebt, isCreditCategory, n } from '@/lib/debtMath';
 import { EUR, USD } from '@/lib/currency';
 
 const n0 = (value) => Number(value) || 0;
 
-/** Days in a YYYY-MM month, 30 as a safe fallback for a malformed id. */
 export const daysInMonth = (monthId) => {
     const [y, m] = String(monthId || '').split('-').map(Number);
     if (!y || !m) return 30;
@@ -32,12 +33,10 @@ export const daysElapsed = (monthId, todayIso) => {
     return Math.min(total, Math.max(1, Number(String(todayIso).slice(8, 10)) || 1));
 };
 
-const isoOf = (timestamp) => {
-    const d = new Date(n(timestamp));
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+// The one local day key. See localDate.js: this was a hand-rolled copy, and the
+// local-vs-UTC rule is exactly the thing that copy is easy to get wrong.
+const isoOf = isoOfTimestamp;
 
-/** Cash categories are the ones the balance card already counts as spending. */
 const isCashCategory = (c) => c.cash_expense && !c.is_presupuesto;
 
 export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, todayIso = '', currency = USD } = {}) {
@@ -94,10 +93,15 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
         .sort((a, b) => b.amountBs - a.amountBs);
 
     const calculated = debts.map((debt) => ({ debt, ...calculateDebt(debt, rate) }));
-    const remainingBs = calculated.reduce((s, d) => s + d.remainingBs, 0);
+    // Unassigned credit is owed money too. `creditBs` is already filtered to
+    // debt-unlinked categories, so adding it here makes this total the same
+    // quantity as Budget::getDebtBsAttribute and the debt summary modal.
+    const remainingBs = calculated.reduce((s, d) => s + d.remainingBs, 0) + creditBs;
     const paidBs = calculated.reduce((s, d) => s + d.paidBs, 0);
     const chargesBs = calculated.reduce((s, d) => s + d.currentChargesBs, 0);
-    const debtBaseBs = calculated.reduce((s, d) => s + d.openingBs, 0) + chargesBs;
+    // Same credit term as `remainingBs`, so the progress bar and the "pagados
+    // sobre" caption are measured against the figure shown in the headline.
+    const debtBaseBs = calculated.reduce((s, d) => s + d.openingBs, 0) + chargesBs + creditBs;
     const debtPaidPct = debtBaseBs > 0 ? Math.min(100, (paidBs / debtBaseBs) * 100) : 0;
 
     const openingBs = n0(budget.opening_balance_bs);
@@ -155,8 +159,8 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
         : null;
     // Same rule the dashboard already uses for isBudgetOk: a plan that fits
     // inside the available balance is healthy, one that exceeds it is not.
-    // A zero balance is not "over plan" — there is simply nothing to compare
-    // against — so it stays neutral instead of showing a false warning.
+    // A zero balance is not "over plan" 窶・there is simply nothing to compare
+    // against 窶・so it stays neutral instead of showing a false warning.
     const planFitsBalance = availableBalanceBs > 0
         ? availableBalanceBs >= planTotalBs
         : true;
@@ -168,11 +172,13 @@ export function buildInsights(budget = {}, { savingsLedger = [], rate = 0, today
             const category = categoryByName.get(e.category_name);
             // Three kinds of spending, and they are genuinely different money: cash
             // leaves the balance, a credit purchase does not yet, and a tracked
-            // expense is not spending at all. The credit test is the same predicate
-            // the credit total uses, so the tag and the figure cannot disagree.
+            // expense is not spending at all. The tag asks whether the money left
+            // the account, so it uses the broad test: a credit purchase linked to a
+            // named debt is still bought on credit, and the `debt_id` exclusion
+            // exists only so that total is not counted twice.
             let type = 'expense';
             if (category?.is_presupuesto) type = 'presupuesto';
-            else if (isCreditExpense(category)) type = 'credit';
+            else if (isCreditCategory(category)) type = 'credit';
             return {
                 id: `e-${e.id}`,
                 timestamp: n(e.timestamp),

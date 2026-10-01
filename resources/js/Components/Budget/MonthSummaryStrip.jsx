@@ -18,7 +18,9 @@ function SummaryItem({ label, amountBs, rate, align = 'left' }) {
 
     return (
         <div className={`min-w-0 px-3 first:pl-0 last:pr-0 ${align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}`}>
-            <p className="truncate whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            {/* gray-500, not gray-400: the strip sits on white and these are the
+                month figures themselves. gray-400 was ~2.6:1 at 10px. */}
+            <p className="truncate whitespace-nowrap text-[11px] font-bold uppercase tracking-widest text-gray-500 dark:text-gray-500">
                 {label}
             </p>
             <p
@@ -31,7 +33,7 @@ function SummaryItem({ label, amountBs, rate, align = 'left' }) {
             <p
                 ref={usdRef}
                 style={{ fontSize: `${usdSize}px` }}
-                className="whitespace-nowrap font-medium leading-tight tabular text-gray-400 dark:text-gray-500"
+                className="whitespace-nowrap font-medium leading-tight tabular text-gray-500 dark:text-gray-400"
             >
                 &asymp; {fmtUsd(usd)} {symbol}
             </p>
@@ -51,7 +53,6 @@ export default function MonthSummaryStrip({ incomeBs, expensesBs, paidBs, rate, 
         <a
             href={insightsUrl}
             onClick={openInsights}
-            aria-label="Abrir el análisis del mes"
             title="Abrir el análisis del mes"
             className="touch-feedback group block rounded-2xl transition-transform duration-150 active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-[#FF8A3D] dark:focus-visible:ring-[#9B7BFF]"
         >

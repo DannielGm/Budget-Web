@@ -1,20 +1,20 @@
-import React from 'react';
+﻿import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowDownToLine, ArrowUpFromLine, Landmark, History, ArrowRightLeft } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import { fmtBs, fmtUsd } from '@/lib/money';
+import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 import useFitText from '@/hooks/useFitText';
 import { inWindow } from '@/lib/scopedMoney';
 import { n } from '@/lib/debtMath';
 import { fmtForeign, potAmount, useCurrency, EUR, USD } from '@/lib/currency';
 import { useCurrencySymbol, useFigure, useRateLabel } from '@/hooks/useFigure';
 import SavingsPoolSummaryStrip from '@/Components/Budget/SavingsPoolSummaryStrip';
+import { isoOfTimestamp } from '@/lib/localDate';
 
-const isoOf = (ms) => {
-    const d = new Date(Number(ms) || 0);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+// The one local day key. See localDate.js: this was a hand-rolled copy, and a
+// movement landing on the wrong day here is a movement missing from the history.
+const isoOf = isoOfTimestamp;
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -37,7 +37,7 @@ const partLabel = (type, id) => {
 };
 
 
-/** The "Deposito - Ahorro -> Banco" style tag, kept on a single line. */
+/** The "Depósito - Ahorro -> Banco" style tag, kept on a single line. */
 function MovementTag({ children, className }) {
     const [ref, size] = useFitText({ min: 5.5, max: 7 });
 
@@ -125,7 +125,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
                     <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-white/80 sm:text-sm sm:tracking-widest">
                         {/* The name, not the code: the switch in the header and in
                             Settings says "Dólares". */}
-                        Ahorro Total · {currency === EUR ? 'Euros' : 'Dólares'}
+                        Ahorros Totales • {currency === EUR ? 'Euros' : 'Dólares'}
                     </span>
                     <div className="flex shrink-0 gap-2">
                     <TransferTrigger layoutId={transferLayoutId}>
@@ -200,7 +200,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
                                                             {t.note || (isDeposit ? 'Depósito' : 'Retiro')}
                                                         </p>
                                                         <MovementTag className="mt-1">
-                                                                {isDeposit ? 'Depósito' : 'Retiro'} · {partLabel(t.source_type, t.source_id)} → {partLabel(t.destination_type, t.destination_id)}
+                                                                {isDeposit ? 'Depósito' : 'Retiro'} • {partLabel(t.source_type, t.source_id)} • {partLabel(t.destination_type, t.destination_id)}
                                                             </MovementTag>
                                                         <p className="mt-0.5 text-[10px] text-gray-400 font-medium">
                                                             {new Date(t.timestamp).toLocaleDateString('es-ES')} {new Date(t.timestamp).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
@@ -215,7 +215,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
                                     <p className="font-black text-sm text-blue-600 dark:text-blue-400">
                                         {fmtForeign(t.amount_usd, t.currency || USD)}
                                     </p>
-                                    <BsRateLine value={parseFloat(t.rate || 0).toLocaleString('es-ES')} currency={t.currency || USD} />
+                                    <BsRateLine value={fmtRate(t.rate || 0)} currency={t.currency || USD} />
                                 </div>
                             </div>
                         ) : (
@@ -244,7 +244,7 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
                                             <p className={cn("font-black text-sm", isDeposit ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>
                                                 {isDeposit ? '+' : '-'} {fmtForeign(t.amount_usd, t.currency || USD)}
                                             </p>
-                                            <BsRateLine value={parseFloat(t.exchange_rate).toLocaleString('es-ES')} currency={t.currency || USD} />
+                                            <BsRateLine value={fmtRate(t.exchange_rate || 0)} currency={t.currency || USD} />
                                         </div>
                                     </div>
                                 );
@@ -256,3 +256,4 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
         </div>
     );
 }
+

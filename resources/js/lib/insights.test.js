@@ -209,11 +209,12 @@ describe('buildInsights — activity typing', () => {
         expect(d.activity.find((a) => a.type === 'credit').amountBs).toBe(300);
     });
 
-    it('does not badge a debt-attached category as credit', () => {
-        // The backend's credit total excludes these, because they are already
-        // counted against the debt. If the badge used a second copy of that rule it
-        // would drift, and a row would claim to be credit while the total excluded
-        // it. Both read the one predicate now, and this holds them together.
+    it('badges a credit purchase linked to a debt as credit, not as a cash gasto', () => {
+        // Regression: the tag asked `isCreditExpense`, whose debt_id test exists so
+        // the *total* is not double-counted. A purchase on credit that happened to
+        // be attached to a debt was therefore badged as a cash gasto -- the one
+        // badge that claims the money left the balance when it did not. Where the
+        // charge is filed is a different question from what kind of purchase it is.
         const d = insights({
             categories: [
                 { name: 'Comida', cash_expense: false, is_presupuesto: false, debt_id: 7 },
@@ -223,7 +224,72 @@ describe('buildInsights — activity typing', () => {
             ],
         });
 
-        expect(d.activity[0].type).toBe('expense');
+        expect(d.activity[0].type).toBe('credit');
+    });
+
+    it('keeps cash and plan rows correct while a debt-linked category is present', () => {
+        // The debt_id rule must stay out of the tag without loosening the other
+        // two: only a non-cash, non-plan purchase is credit.
+        const d = insights({
+            categories: [
+                { name: 'Comida', cash_expense: true, is_presupuesto: false, debt_id: 7 },
+                { name: 'Educacion', cash_expense: false, is_presupuesto: true, debt_id: 7 },
+                { name: 'Electrodomestico', cash_expense: false, is_presupuesto: false, debt_id: 7 },
+            ],
+            expenses: [
+                { id: 1, category_name: 'Comida', amount_bs: '100', timestamp: at(10) },
+                { id: 2, category_name: 'Educacion', amount_bs: '200', timestamp: at(11) },
+                { id: 3, category_name: 'Electrodomestico', amount_bs: '300', timestamp: at(12) },
+            ],
+        });
+
+        const types = d.activity
+            .filter((a) => a.id.startsWith('e-'))
+            .map((a) => a.type)
+            .sort();
+
+        expect(types).toEqual(['credit', 'expense', 'presupuesto']);
     });
 });
 
+describe('buildInsights -- the debt total', () => {
+    const debt = {
+        id: 1,
+        label: 'Banco',
+        opening_bs: '1000',
+        credit_expenses_bs: '200',
+        payment_bs: '300',
+        payments: [],
+    };
+
+    it('counts unassigned credit as part of what is owed', () => {
+        // Regression: the figure summed the named debts only, so this screen showed
+        // less than the summary modal opened from the dashboard, which uses the
+        // backend total and does include unassigned credit purchases.
+        const d = insights({ debts: [debt], credit_purchases_bs: '150' });
+
+        // 1000 + 200 - 300 = 900 on the named debt, plus 150 unfiled.
+        expect(d.remainingBs).toBe(1050);
+    });
+
+    it('measures the debt progress bar against the same total', () => {
+        const d = insights({ debts: [debt], credit_purchases_bs: '150' });
+
+        // 300 paid out of 1050 still owed + 300 paid.
+        expect(d.debtBaseBs).toBe(1350);
+        expect(d.debtPaidPct).toBeCloseTo((300 / 1350) * 100, 5);
+    });
+
+    it('still totals correctly with no unassigned credit', () => {
+        const d = insights({ debts: [debt], credit_purchases_bs: '0' });
+
+        expect(d.remainingBs).toBe(900);
+        expect(d.debtBaseBs).toBe(1200);
+    });
+
+    it('is owed money even with no named debts at all', () => {
+        const d = insights({ debts: [], credit_purchases_bs: '150' });
+
+        expect(d.remainingBs).toBe(150);
+    });
+});

@@ -52,10 +52,20 @@ describe('calculateDebt', () => {
         expect(result.overpaidBs).toBe(300);
     });
 
-    it('skips credit already represented by a named debt', () => {
-        const debts = [{ credit_expenses_bs: '100' }];
+    it('reports the credit total as-is, because the backend already excluded debt-linked charges', () => {
+        // `credit_purchases_bs` comes from the query with whereNull(debt_id), so
+        // subtracting a debt's own charges again double-counted them. The fixture
+        // total is 100 with 250 of charges on debt 1: the old code clamped this
+        // to 0 and hid every unassigned purchase.
+        const { budget, debts } = fixture();
 
-        expect(unassignedCreditPurchases(debts, 250)).toBe(150);
+        expect(debts[0].credit_expenses_bs).toBe('250');
+        expect(unassignedCreditPurchases(budget.credit_purchases_bs)).toBe(100);
+    });
+
+    it('never reports a negative unassigned total', () => {
+        expect(unassignedCreditPurchases(-5)).toBe(0);
+        expect(unassignedCreditPurchases(undefined)).toBe(0);
     });
 });
 

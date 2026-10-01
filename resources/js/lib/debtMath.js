@@ -1,6 +1,19 @@
 export const n = (value) => Number(value) || 0;
 
 /**
+ * Whether a category buys on credit at all: it spends no cash and is not a plan.
+ *
+ * This answers "did I not pay for this today?", which is what the credit tag
+ * asks. Whether the charge is *also* attached to a named debt is a separate
+ * question, asked only when totalling: see `isCreditExpense`.
+ */
+export function isCreditCategory(category) {
+    if (!category) return false;
+    if (category.cash_expense) return false;
+    return !category.is_presupuesto;
+}
+
+/**
  * Canonical calculation for a named debt. Current credit charges are part of
  * the debt balance; payments reduce it. The caller owns the global credit
  * purchases total so those are never mixed into a named debt twice.
@@ -40,13 +53,18 @@ export function calculateDebt(debt = {}, rate = 0) {
 }
 
 
-/** Credit purchases not already represented by a named debt's current charges. */
-export function unassignedCreditPurchases(debts = [], globalCreditPurchasesBs = 0) {
-    const assigned = debts.reduce(
-        (sum, debt) => sum + n(debt.credit_expenses_bs),
-        0,
-    );
-    return Math.max(0, n(globalCreditPurchasesBs) - assigned);
+/**
+ * Credit purchases that no named debt is already tracking.
+ *
+ * `globalCreditPurchasesBs` is `Budget::credit_purchases_bs`, which the backend
+ * computes with `whereNull('categories.debt_id')` -- a charge attached to a debt
+ * is *already excluded* there, because that debt counts the charge itself.
+ * Subtracting the debts' charges a second time double-counted them and drove
+ * this figure to zero. The debts argument is gone on purpose: nothing may
+ * subtract from a total that has already been filtered.
+ */
+export function unassignedCreditPurchases(globalCreditPurchasesBs = 0) {
+    return Math.max(0, n(globalCreditPurchasesBs));
 }
 
 /** End-of-day cutoff in ms for a YYYY-MM-DD string, inclusive. */
@@ -115,15 +133,14 @@ export function debtsAsOf(debts = [], dateFilter = null, budget = {}) {
  * Whether one expense row is a credit purchase.
  *
  * The one definition of that rule, extracted because two callers need it and a
- * second copy would be free to drift: `creditPurchasesAsOf` sums the rows, and the
- * insights activity list tags them. Mirrors `Budget::getCreditPurchasesBsAttribute`
- * exactly -- credit is a non-cash, non-plan category that is NOT attached to a
- * debt, since a debt's own charges are counted against that debt.
+ * second copy would be free to drift: `creditPurchasesAsOf` sums the rows, while
+ * `isCreditCategory` -- derived from it -- tags them. Mirrors
+ * `Budget::getCreditPurchasesBsAttribute`
+ * exactly -- a charge attached to a debt is excluded, so this sums only the
+ * unassigned half. `isCreditCategory` is the broader test the activity tag uses.
  */
 export function isCreditExpense(category) {
-    if (!category) return false;
-    if (category.cash_expense) return false;
-    if (category.is_presupuesto) return false;
+    if (!isCreditCategory(category)) return false;
     return category.debt_id === null || category.debt_id === undefined;
 }
 

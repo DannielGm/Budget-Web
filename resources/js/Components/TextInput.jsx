@@ -11,11 +11,15 @@ export default forwardRef(function TextInput(
     }));
 
     useEffect(() => {
-        if (isFocused) {
-            localRef.current?.focus();
-        }
+        if (!isFocused) return;
+        // Desktop only. The app ships as a NativePHP Android build, and focusing
+        // an input on open raises the soft keyboard over the form -- on the
+        // login screen, on the profile form, and on the delete-account
+        // confirmation, every time it opened. A pointer:fine device is a mouse
+        // or a keyboard, where a focused first field is what the user wants.
+        if (typeof window === 'undefined' || !window.matchMedia?.('(pointer: fine)').matches) return;
+        localRef.current?.focus();
     }, [isFocused]);
-
     return (
         <input
             {...props}

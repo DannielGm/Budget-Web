@@ -49,8 +49,19 @@ export function ConfirmationProvider({ children }) {
     return (
         <ConfirmationContext.Provider value={confirmAction}>
             {children}
-            <Modal show={Boolean(confirmation)} onClose={() => finish(false)} maxWidth="sm">
-                <div role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-message" className="p-5">
+            {/* The alertdialog role belongs on the Dialog itself, not on a div
+                nested inside it: Headless UI's Dialog is already a dialog, and
+                two nested dialog roles is worse than one unnamed one. The
+                cancel button takes focus, so a destructive prompt opens on the
+                safe answer. */}
+            <Modal
+                show={Boolean(confirmation)}
+                onClose={() => finish(false)}
+                maxWidth="sm"
+                role="alertdialog"
+                labelledBy="confirmation-title"
+            >
+                <div aria-describedby="confirmation-message" className="p-5">
                     <div className="flex items-start gap-3">
                         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tone.icon}`}>
                             <AlertTriangle size={22} />

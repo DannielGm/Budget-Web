@@ -9,6 +9,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import { useForm, router, usePage } from '@inertiajs/react';
 import { CreditCard } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 
 export default function CategoryForm({ show, onClose, category, monthId,
     layoutId = null,
@@ -101,11 +102,13 @@ export default function CategoryForm({ show, onClose, category, monthId,
         onClose();
     };
 
+    const isDirty = useFormDirty(data, show);
+
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId} labelledBy="category-form-title" dirty={isDirty}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
-                    {category ? `Editar Categoría: ${category.name}` : 'Nueva Categoría'}
+                <h2 id="category-form-title" className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4 uppercase tracking-tight">
+                    {category ? `Editar categoría: ${category.name}` : 'Nueva categoría'}
                 </h2>
 
                 <div className="space-y-4">
@@ -124,9 +127,10 @@ export default function CategoryForm({ show, onClose, category, monthId,
                     </div>
 
                     <div className="space-y-3 mt-4">
-                        <InputLabel value="Tipo de Categoría" className="dark:text-gray-300" />
+                        <label htmlFor="category-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Categoría</label>
 
                         <select
+                            id="category-type"
                             value={currentType}
                             onChange={(e) => handleTypeChange(e.target.value)}
                             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-[#FF8A3D] focus:ring-[#FF8A3D] dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
@@ -156,13 +160,15 @@ export default function CategoryForm({ show, onClose, category, monthId,
 
                             {isLinked && (
                                 <div>
+                                    <label htmlFor="debt_id" className="block text-sm font-medium text-gray-700 dark:text-gray-300">Deuda a la que se asigna</label>
                                     <select
+                                        id="debt_id"
                                         value={data.debt_id}
                                         onChange={(e) => setData('debt_id', e.target.value)}
                                         className="w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:bg-gray-800 dark:text-white dark:border-gray-700 sm:text-sm"
                                         required
                                     >
-                                        <option value="" disabled>Seleccione una deuda...</option>
+                                        <option value="" disabled>Seleccione una deuda…</option>
                                         {budget.debts.filter(d => d.label !== 'Compras a crédito').map(d => (
                                             <option key={d.id} value={d.id}>{d.label}</option>
                                         ))}
@@ -181,7 +187,7 @@ export default function CategoryForm({ show, onClose, category, monthId,
                             onClick={handleDelete}
                             className="text-red-500 hover:text-red-700 text-sm font-bold transition-colors py-2 sm:py-0 w-full sm:w-auto text-center"
                         >
-                            Eliminar Categoría
+                            Eliminar categoría
                         </button>
                     ) : <div className="hidden sm:block"></div>}
 
@@ -190,7 +196,7 @@ export default function CategoryForm({ show, onClose, category, monthId,
                             Cancelar
                         </SecondaryButton>
                         <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                            Guardar
+                            {processing ? 'Guardando…' : 'Guardar'}
                         </PrimaryButton>
                     </div>
                 </div>

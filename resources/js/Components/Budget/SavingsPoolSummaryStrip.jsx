@@ -116,7 +116,6 @@ export default function SavingsPoolSummaryStrip({ pools = [], summaryUrl }) {
                 event.preventDefault();
                 router.visit(summaryUrl);
             }}
-            aria-label="Abrir el resumen de ahorros"
             title="Abrir el resumen de ahorros"
             className="touch-feedback group block rounded-2xl transition-transform duration-150 active:scale-[0.985] focus-visible:ring-2 focus-visible:ring-[#FF8A3D] dark:focus-visible:ring-[#9B7BFF]"
         >

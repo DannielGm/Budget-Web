@@ -1,4 +1,5 @@
-/**
+
+﻿/**
  * What is true for the active range.
  *
  * The month arrives as a mixture of two kinds of data: timestamped rows
@@ -15,15 +16,16 @@
  * With no date filter it returns the server's stored month columns untouched,
  * so the month view is unchanged by construction rather than by care.
  */
+import { isoOfTimestamp } from '@/lib/localDate';
 import { expensesInRange } from '@/lib/rangeHelpers';
 import { debtsAsOf, creditPurchasesAsOf, calculateDebt, n } from '@/lib/debtMath';
 
 const sum = (rows, pick) => (rows || []).reduce((total, row) => total + (Number(pick(row)) || 0), 0);
 
-const isoOf = (timestampMs) => {
-    const d = new Date(Number(timestampMs) || 0);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+// One definition of the day key, and it is the LOCAL one. See localDate.js:
+// the previous hand-rolled copy here and seven others all had to get the timezone
+// right, and two of them did not. See isoOfTimestamp for the rule.
+const isoOf = isoOfTimestamp;
 
 /**
  * Is this date inside the active window? rangeDays mirrors Mes / 7d / 1d, and a
@@ -175,3 +177,4 @@ export function scopeMonth(budget = {}, { savingsLedger = [], dateFilter = null,
 export function heroBalance(budget, options) {
     return scopeMonth(budget, options).availableBs;
 }
+

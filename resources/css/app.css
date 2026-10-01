@@ -148,6 +148,11 @@
     *::before,
     *::after {
         animation-duration: 0.01ms !important;
+        /* Also the delay. The staged reveal in "Análisis" sets an inline
+           animationDelay of up to 300ms per card; zeroing only the duration
+           left every card sitting on a blank frame, then staggering in -- the
+           exact effect the setting asks us to drop. */
+        animation-delay: 0.01ms !important;
         animation-iteration-count: 1 !important;
         scroll-behavior: auto !important;
         transition-duration: 0.01ms !important;

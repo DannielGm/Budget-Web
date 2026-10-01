@@ -96,15 +96,41 @@ class Budget extends Model
      * 'saving'), keeping what was saved in dollars apart from what was saved in
      * euros. A pool is not marked as one currency: the dollars and the euros you
      * hold in the same place are two pots, each stated in its own unit.
+     *
+     * A POOL IS A RUNNING BALANCE, not a month's activity, so this sums every
+     * month up to and including this one rather than this month alone.
+     *
+     * It used to read the month-scoped relations, which meant a new month opened
+     * with every pool at 0.00 -- money you had saved simply stopped existing the
+     * moment the calendar turned over. Debts never had that problem because
+     * loadOrCreate() clones an outstanding debt into the new month as its
+     * opening balance; savings had no equivalent, and adding one (seeding an
+     * opening row) would mean duplicating rows and a new type value to carry a
+     * figure that is only ever a sum of rows that already exist.
+     *
+     * The month_id comparison is a string comparison, which is correct for the
+     * YYYY-MM ids used throughout and is the same comparison loadOrCreate()
+     * already uses to find the predecessor month.
+     *
+     * The relations themselves are untouched: savingsLedger() reads this
+     * month's movements and still should, because a list of what happened in
+     * September is a different question from how much you have now.
      */
     public function getSavingsPoolsAttribute(): array
     {
         return once(function () {
-            $transactions = $this->savingsTransactions;
-            $transfers = $this->transfers;
+            $transactions = SavingTransaction::query()
+                ->where('month_id', '<=', $this->month_id)
+                ->get();
+            $transfers = Transfer::query()
+                ->where('month_id', '<=', $this->month_id)
+                ->get();
 
             return collect(self::SAVINGS_POOLS)->map(function (string $pool) use ($transactions, $transfers) {
-                $balances = ['USD' => '0', 'EUR' => '0'];
+                // Seeded as '0', not '0.00': a pot nothing has ever been saved
+            // into reports the bare seed rather than a computed balance, and
+            // the frontend reads both as zero. SavingsRouteTest pins it.
+            $balances = ['USD' => '0', 'EUR' => '0'];
 
                 foreach ($transactions as $t) {
                     if (self::normalizeSavingsPool($t->category) !== $pool) {

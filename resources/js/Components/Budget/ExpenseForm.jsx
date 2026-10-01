@@ -13,12 +13,22 @@ import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
 import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 import { useCurrencySymbol, useBolivarFigure, useRateLabel } from '@/hooks/useFigure';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 
 const pad = (n) => String(n).padStart(2, '0');
 
+/** "dd/mm HH:MM" in LOCAL time, via Intl rather than by hand.
+ *
+ *  The hand-rolled version read getHours()/getMinutes() off a Date built from
+ *  a millisecond timestamp, which is local -- so this keeps that behaviour but
+ *  gets it from the locale, including the padded 24-hour clock. */
+const stampFormat = new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+});
+
 function formatTimestamp(ms) {
-    const d = new Date(ms);
-    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return stampFormat.format(new Date(ms));
 }
 
 export default function ExpenseForm({ show, onClose, expense = null, categoryName, monthId, defaultRate,
@@ -172,8 +182,12 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
         });
     };
 
+    // Computed here rather than inline in the JSX: a hook call buried in a prop
+    // list reads as a value and is easy to reorder past a conditional later.
+    const isDirty = useFormDirty(data, show);
+
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId} labelledBy="expense-form-title" dirty={isDirty}>
             <form onSubmit={submit} className="max-h-[88vh] overflow-y-auto p-5 bg-white dark:bg-gray-900 transition-colors sm:p-6">
                 <div className="mb-5 flex items-center gap-3">
                     {expense && (
@@ -182,7 +196,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                         </button>
                     )}
                     <div className="min-w-0">
-                        <h2 className="text-xl font-black uppercase tracking-tight text-gray-900 dark:text-white">{expense ? 'Editar gasto' : 'Nuevo gasto'}</h2>
+                        <h2 id="expense-form-title" className="text-xl font-black uppercase tracking-tight text-gray-900 dark:text-white">{expense ? 'Editar gasto' : 'Nuevo gasto'}</h2>
                         <p className="mt-0.5 truncate text-xs font-bold text-gray-400">{categoryName} · {isPresupuesto ? 'Presupuesto' : isCash ? 'Contado' : 'Crédito'}</p>
                     </div>
                 </div>
@@ -193,7 +207,7 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
                         <TextInput
                             id="label" type="text" name="label" value={data.label}
                             className="mt-2 block min-h-12 w-full rounded-xl px-4 text-base dark:bg-gray-800 dark:text-white dark:border-gray-700"
-                            onChange={(e) => setData('label', e.target.value)} placeholder="Ej.: Supermercado"
+                            onChange={(e) => setData('label', e.target.value)} placeholder="Ej.: supermercado…"
                             enterKeyHint="next" autoComplete="off" required
                         />
                         <InputError message={errors.label} className="mt-2" />
@@ -250,17 +264,27 @@ export default function ExpenseForm({ show, onClose, expense = null, categoryNam
 
                     <div>
                         <InputLabel htmlFor="timestamp" value="Fecha y hora" className="text-xs font-black uppercase tracking-widest text-gray-500 dark:text-gray-400" />
-                        <TextInput id="timestamp" type="text" value={formatTimestamp(Number(data.timestamp))} readOnly className="mt-2 block min-h-12 w-full dark:bg-gray-800 dark:text-white dark:border-gray-700" />
+                        {/* A readOnly <input> announces as a field the user can
+                            reach but not edit, and it is not one at all: the
+                            buttons below are how the date is set. A <p> says the
+                            same thing without promising an interaction. */}
+                        <p id="timestamp" className="mt-2 block min-h-12 w-full rounded-md border border-gray-300 bg-white px-3 py-3 text-sm dark:border-gray-700 dark:bg-gray-800 dark:text-white">
+                            {formatTimestamp(Number(data.timestamp))}
+                        </p>
                         <div className="mt-2 grid grid-cols-2 gap-2">
                             <button type="button" onClick={() => setShowDatePicker(true)} className="touch-feedback min-h-11 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-700 dark:border-gray-700 dark:text-gray-200">Elegir fecha</button>
                             <button type="button" onClick={() => setData('timestamp', Date.now())} className="touch-feedback min-h-11 rounded-xl border border-gray-200 text-xs font-black uppercase tracking-wider text-gray-700 dark:border-gray-700 dark:text-gray-200">Ahora</button>
                         </div>
                     </div>
 
-                    <div className={`rounded-xl border p-4 ${impactTone}`} aria-live="polite">
-                        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">Efecto de este gasto</p>
-                        <p className="mt-1 text-sm font-black">{impactTitle}</p>
-                        {isCash && amountBs > 0 && <p className="mt-1 text-xs font-bold tabular">Saldo después: Bs {fmtBs(availableBalance - amountBs)}</p>}
+                    {/* The live region covers only what changes, and the static
+                        caption is left out of it: wrapping the whole card meant
+                        every keystroke in the amount field re-announced the
+                        heading and the caption along with the new figure. */}
+                    <div className={`rounded-xl border p-4 ${impactTone}`}>
+                        <p className="text-[11px] font-black uppercase tracking-widest opacity-70">Efecto de este gasto</p>
+                        <p className="mt-1 text-sm font-black" aria-live="polite">{impactTitle}</p>
+                        {isCash && amountBs > 0 && <p className="mt-1 text-xs font-bold tabular" aria-live="polite">Saldo después: Bs {fmtBs(availableBalance - amountBs)}</p>}
                     </div>
                 </div>
 

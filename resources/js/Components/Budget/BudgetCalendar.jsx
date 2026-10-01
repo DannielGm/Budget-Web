@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import Modal from '@/Components/Modal';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import PrimaryButton from '@/Components/PrimaryButton';
 import SecondaryButton from '@/Components/SecondaryButton';
+import * as localDate from '@/lib/localDate';
 
 const DAY_LABELS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -18,15 +19,19 @@ const MONTH_SHORT = [
 
 const MIN_YEAR = 1;
 
-const monthIdOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-
+// The one local day key and the one month id, both from localDate.js. These two
+// were the ninth and tenth copies; the file also carried the only two that were
+// WRONG for a while, both built on toISOString(), which converts to UTC first.
+// See localDate.js for why that put "today" on tomorrow's cell for four hours
+// every evening in Venezuela, and why one definition is the fix.
+const { isoOfDay, monthIdOfDate: monthIdOf } = localDate;
 /**
  * Web port of the Kotlin app's BudgetCalendar composable: a month/day
  * picker dialog with multi-month navigation, a year jump input and a
  * Monday-first grid. Days after today are disabled.
  *
  * Modes:
- *  - select (default): "Ver día" / "Ver mes" actions.
+ *  - select (default): "Ver dia" / "Ver mes" actions.
  *  - pickDay: single "Elegir fecha" action (used by the expense editor).
  */
 export default function BudgetCalendar({
@@ -125,9 +130,9 @@ export default function BudgetCalendar({
     };
 
     return (
-        <Modal show={show} onClose={onClose} maxWidth="sm">
+        <Modal show={show} onClose={onClose} maxWidth="sm" labelledBy="calendar-title">
             <div className="p-6 bg-white dark:bg-gray-900 transition-colors">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight mb-4">
+                <h2 id="calendar-title" className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight mb-4">
                     {title}
                 </h2>
 
@@ -157,9 +162,11 @@ export default function BudgetCalendar({
                 </div>
 
                 <div className="flex items-center justify-center gap-2 mb-4">
-                    <span className="text-xs font-bold text-gray-400 uppercase">Año</span>
+                    <label htmlFor="calendar-year" className="text-xs font-bold text-gray-500 uppercase dark:text-gray-400">Año</label>
                     <input
+                        id="calendar-year"
                         type="number"
+                        inputMode="numeric"
                         value={yearInput}
                         min={MIN_YEAR}
                         max={maxYear}
@@ -177,15 +184,17 @@ export default function BudgetCalendar({
                     </button>
                 </div>
 
-                <div className="grid grid-cols-7 gap-1 text-center mb-1">
+                <div className="grid grid-cols-7 gap-1 text-center mb-1" role="row">
                     {DAY_LABELS.map((label) => (
-                        <span key={label} className="text-[10px] font-black text-gray-400 uppercase py-1">
+                        <span key={label} role="columnheader" className="text-[11px] font-black text-gray-500 uppercase dark:text-gray-400 py-1">
                             {label}
                         </span>
                     ))}
                 </div>
 
-                <div className="grid grid-cols-7 gap-1 text-center">
+                {/* role="grid" so the day cells are read as a calendar rather
+                    than as thirty-one unlabelled buttons in a row. */}
+                <div className="grid grid-cols-7 gap-1 text-center" role="grid" aria-label={`${MONTH_NAMES[viewMonth]} de ${viewYear}`}>
                     {grid.map((day, index) => {
                         if (day === null) {
                             return <span key={`empty-${index}`} />;
@@ -194,15 +203,22 @@ export default function BudgetCalendar({
                         const iso = dayIso(day);
                         const isFuture = new Date(`${iso}T00:00:00`) > today;
                         const isSelected = selectedDay === day;
-                        const isToday = iso === today.toISOString().slice(0, 10);
+                        const isToday = iso === isoOfDay(today);
 
                         return (
                             <button
                                 key={iso}
                                 type="button"
+                                role="gridcell"
                                 disabled={isFuture}
                                 onClick={() => setSelectedDay(day)}
-                                aria-label={`${day} de ${MONTH_NAMES[viewMonth]} de ${viewYear}`}
+                                /* The selected day was orange and nothing else --
+                                   aria-pressed is what carries it without sight of
+                                   the colour, and the label says so too, because a
+                                   date that is "selected" needs saying. */
+                                aria-pressed={isSelected}
+                                aria-current={isToday ? 'date' : undefined}
+                                aria-label={`${day} de ${MONTH_NAMES[viewMonth]} de ${viewYear}${isSelected ? ', seleccionado' : ''}`}
                                 className={
                                     'rounded-full py-1 text-sm font-bold transition-colors ' +
                                     (isSelected
@@ -256,3 +272,4 @@ export default function BudgetCalendar({
 }
 
 export { monthIdOf, MONTH_SHORT };
+

@@ -3,10 +3,21 @@ import Modal from '@/Components/Modal';
 import { CreditCard, ArrowDownToLine } from 'lucide-react';
 import { fmtBs, fmtUsd, fmtPct } from '@/lib/money';
 import { calculateDebt, unassignedCreditPurchases, n } from '@/lib/debtMath';
+import useFitText from '@/hooks/useFitText';
 import { useCurrencySymbol, useBolivarFigure } from '@/hooks/useFigure';
 
 const dateLabel = (timestamp) => new Date(Number(timestamp)).toLocaleDateString('es-ES');
 
+/** A debt name that shrinks to fit instead of being clipped, like the card row. */
+function SummaryName({ label }) {
+    const [ref, fontSize] = useFitText({ min: 10, max: 14 });
+
+    return (
+        <span ref={ref} style={{ fontSize }} className="block font-bold text-gray-800 dark:text-gray-100">
+            {label}
+        </span>
+    );
+}
 export default function DebtSummaryModal({
     show,
     onClose,
@@ -18,7 +29,7 @@ export default function DebtSummaryModal({
     const accounts = debts.map((debt) => ({ debt, ...calculateDebt(debt, currentRate) }));
     const payments = accounts.flatMap(({ debt, payments: rows }) => rows.map((payment) => ({ ...payment, debtLabel: debt.label })))
         .sort((a, b) => n(b.timestamp) - n(a.timestamp));
-    const unassignedCreditBs = unassignedCreditPurchases(debts, creditPurchasesBs);
+    const unassignedCreditBs = unassignedCreditPurchases(creditPurchasesBs);
     const totalPaidBs = accounts.reduce((sum, item) => sum + item.paidBs, 0);
     const totalRemainingBs = n(authoritativeTotalBs ?? accounts.reduce((sum, item) => sum + item.remainingBs, 0) + unassignedCreditBs);
     const totalBeforePayments = Math.max(0, totalRemainingBs + totalPaidBs);
@@ -27,11 +38,11 @@ export default function DebtSummaryModal({
     const creditUsd = n(currentRate) > 0 ? unassignedCreditBs / n(currentRate) : 0;
 
     return (
-        <Modal show={show} onClose={onClose} maxWidth="sm">
+        <Modal show={show} onClose={onClose} maxWidth="sm" labelledBy="debt-summary-title">
             <div className="max-h-[88dvh] overflow-y-auto bg-white p-5 dark:bg-gray-900">
                 <div className="flex items-center gap-3">
                     <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#1A1A1A]"><CreditCard size={22} className="text-white" /></div>
-                    <div><h2 className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Estado de Deuda</h2><p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Resumen del mes</p></div>
+                    <div><h2 id="debt-summary-title" className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Estado de Deuda</h2><p className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Resumen del mes</p></div>
                 </div>
 
                 <section className="mt-5 rounded-2xl bg-gray-50 p-4 dark:bg-gray-800/60" aria-labelledby="debt-total-label">
@@ -47,7 +58,7 @@ export default function DebtSummaryModal({
                     <h3 id="debt-accounts-title" className="border-b border-gray-100 pb-2 text-xs font-black uppercase tracking-widest text-gray-400 dark:border-gray-800">Cuentas</h3>
                     <div className="mt-3 space-y-2">
                         {unassignedCreditBs > 0 && <div className="rounded-xl border border-gray-100 p-3 dark:border-gray-800"><p className="text-sm font-bold text-gray-800 dark:text-gray-100">Compras a crédito sin asignar</p><p className="mt-1 whitespace-nowrap text-sm font-black tabular text-gray-900 dark:text-white">Bs {fmtBs(unassignedCreditBs)}</p><p className="text-[10px] font-bold tabular text-gray-500 dark:text-gray-400">≈ {fmtUsd(creditUsd)}</p></div>}
-                        {accounts.map(({ debt, openingBs, currentChargesBs, totalBs, paidBs, remainingBs, remainingUsd: accountUsd, paidPercentage: accountPaid }) => <div key={debt.id} className="rounded-xl border border-gray-100 p-3 dark:border-gray-800"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-bold text-gray-800 dark:text-gray-100">{debt.label}</p><p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">Original Bs {fmtBs(openingBs)}{currentChargesBs > 0 ? ` · Nuevos cargos Bs ${fmtBs(currentChargesBs)}` : ''}</p></div><div className="shrink-0 text-right"><p className="whitespace-nowrap text-sm font-black tabular text-gray-900 dark:text-white">Bs {fmtBs(remainingBs)}</p><p className="whitespace-nowrap text-[10px] font-bold tabular text-gray-400">≈ {fmtUsd(accountUsd)}</p></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"><div className={`h-full rounded-full ${accountPaid >= 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${accountPaid}%` }} /></div><p className="mt-1.5 text-[10px] font-bold tabular text-gray-500 dark:text-gray-400">{fmtPct(accountPaid, 0)}% pagado - Bs {fmtBs(paidBs)} <span className="text-gray-600 dark:text-gray-500">de Bs {fmtBs(totalBs)}</span></p></div>)}
+                        {accounts.map(({ debt, openingBs, currentChargesBs, totalBs, paidBs, remainingBs, remainingUsd: accountUsd, paidPercentage: accountPaid }) => <div key={debt.id} className="rounded-xl border border-gray-100 p-3 dark:border-gray-800"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><SummaryName label={debt.label} /><p className="mt-0.5 text-[10px] text-gray-500 dark:text-gray-400">Original Bs {fmtBs(openingBs)}{currentChargesBs > 0 ? ` · Nuevos cargos Bs ${fmtBs(currentChargesBs)}` : ''}</p></div><div className="shrink-0 text-right"><p className="whitespace-nowrap text-sm font-black tabular text-gray-900 dark:text-white">Bs {fmtBs(remainingBs)}</p><p className="whitespace-nowrap text-[10px] font-bold tabular text-gray-400">≈ {fmtUsd(accountUsd)}</p></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800"><div className={`h-full rounded-full ${accountPaid >= 100 ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${accountPaid}%` }} /></div><p className="mt-1.5 text-[10px] font-bold tabular text-gray-500 dark:text-gray-400">{fmtPct(accountPaid, 0)}% pagado - Bs {fmtBs(paidBs)} <span className="text-gray-600 dark:text-gray-500">de Bs {fmtBs(totalBs)}</span></p></div>)}
                         {accounts.length === 0 && unassignedCreditBs <= 0 && <p className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-400 dark:border-gray-700">Sin deudas registradas</p>}
                     </div>
                 </section>
@@ -56,7 +67,7 @@ export default function DebtSummaryModal({
                 <section className="mt-6" aria-labelledby="debt-payments-title">
                     <h3 id="debt-payments-title" className="border-b border-gray-100 pb-2 text-xs font-black uppercase tracking-widest text-gray-400 dark:border-gray-800">Historial de pagos</h3>
                     <div className="mt-3 space-y-2">
-                        {payments.length ? payments.map((payment) => <div key={payment.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3 dark:border-gray-800"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"><ArrowDownToLine size={16} /></div><div className="min-w-0"><p className="truncate text-sm font-bold text-gray-800 dark:text-gray-100">{payment.debtLabel}</p><p className="text-[10px] text-gray-500 dark:text-gray-400">{payment.method} · {dateLabel(payment.timestamp)}</p></div></div><div className="shrink-0 text-right"><p className="whitespace-nowrap text-sm font-black tabular text-emerald-600 dark:text-emerald-400">− Bs {fmtBs(payment.amount_bs)}</p><p className="whitespace-nowrap text-[10px] font-bold tabular text-gray-500 dark:text-gray-400">≈ {fmtUsd(n(currentRate) > 0 ? n(payment.amount_bs) / n(currentRate) : 0)}</p></div></div>) : <p className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-400 dark:border-gray-700">Sin pagos registrados</p>}
+                        {payments.length ? payments.map((payment) => <div key={payment.id} className="flex items-center justify-between gap-3 rounded-xl border border-gray-100 p-3 dark:border-gray-800"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400"><ArrowDownToLine size={16} /></div><div className="min-w-0"><SummaryName label={payment.debtLabel} /><p className="text-[10px] text-gray-500 dark:text-gray-400">{payment.method} · {dateLabel(payment.timestamp)}</p></div></div><div className="shrink-0 text-right"><p className="whitespace-nowrap text-sm font-black tabular text-emerald-600 dark:text-emerald-400">− Bs {fmtBs(payment.amount_bs)}</p><p className="whitespace-nowrap text-[10px] font-bold tabular text-gray-500 dark:text-gray-400">≈ {fmtUsd(n(currentRate) > 0 ? n(payment.amount_bs) / n(currentRate) : 0)}</p></div></div>) : <p className="rounded-xl border border-dashed border-gray-200 p-6 text-center text-sm text-gray-400 dark:border-gray-700">Sin pagos registrados</p>}
                     </div>
                 </section>
 

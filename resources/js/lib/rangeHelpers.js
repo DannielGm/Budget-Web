@@ -1,4 +1,5 @@
-/**
+
+﻿/**
  * Which expenses belong to the active range, and the category list that follows
  * from it.
  *
@@ -23,6 +24,7 @@
  * rangeDays mirrors the Mes / 7d / 1d switch: >= 30 is the month, <= 1 is the
  * single selected day, otherwise the trailing window clamped to the 1st.
  */
+import { isoOfTimestamp } from '@/lib/localDate';
 export function expensesInRange(budget, categoryName, dateFilter, rangeDays) {
     const all = (budget.expenses || []).filter((e) => e.category_name === categoryName);
     if (dateFilter === null || dateFilter === undefined) return all;
@@ -60,7 +62,5 @@ export function filteredCategories(budget, dateFilter, rangeDays) {
 }
 
 function sameDay(timestampMs, dateIso) {
-    const d = new Date(timestampMs);
-    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    return iso === dateIso;
+    return isoOfTimestamp(timestampMs) === dateIso;
 }

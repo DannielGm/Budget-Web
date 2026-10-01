@@ -13,11 +13,26 @@ import { useConfirm } from '@/Components/ConfirmationProvider';
 import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 import { calculateDebt, n } from '@/lib/debtMath';
 import { useCurrencySymbol, useBolivarFigure, useRateLabel } from '@/hooks/useFigure';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 
+/** Zero-pad a number to two digits, for the YYYY-MM-DD day keys.
+ *
+ *  Kept after paymentDate moved to Intl: the calendar below builds its
+ *  `initialDayIso` with it, and a machine date key is not something Intl is
+ *  for -- it would give a localized string where the API needs YYYY-MM-DD. */
 const pad = (value) => String(value).padStart(2, '0');
+
+/** A payment's date, or a visible placeholder if the stored timestamp is not a
+ *  date. `Intl.DateTimeFormat.format` returns "Invalid Date" for a bad input
+ *  rather than throwing, and that string used to reach the screen; the guard is
+ *  what the old isNaN() branch was for, kept because it is the only thing
+ *  standing between a null timestamp and a nonsense figure in a money app. */
+const paymentDateFormat = new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+});
 const paymentDate = (ms) => {
     const d = new Date(Number(ms));
-    return isNaN(d.getTime()) ? '--/--/----' : `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    return isNaN(d.getTime()) ? '--/--/----' : paymentDateFormat.format(d);
 };
 const tabs = [
     { id: 'details', label: 'Datos' },
@@ -108,13 +123,15 @@ export default function DebtForm({ show, onClose, debt = null, monthId, rate = 0
         if (confirmed) router.delete(route('debt-payments.destroy', payment.id), { preserveScroll: true });
     };
 
+    const isDirty = useFormDirty(data, show);
+
     return (
-        <Modal show={show} onClose={close} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={close} maxWidth="md" layoutId={layoutId} labelledBy="debt-form-title" dirty={isDirty}>
             <form onSubmit={submit} className="max-h-[88dvh] overflow-y-auto bg-white p-5 dark:bg-gray-900">
 
                 <div className="flex items-center gap-3">
                     {debt && <button type="button" onClick={removeDebt} aria-label={`Eliminar deuda ${debt.label}`} className="touch-feedback flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"><Trash2 size={18} /></button>}
-                    <div className="min-w-0 flex-1"><h2 className="truncate text-lg font-bold uppercase tracking-tight text-gray-900 dark:text-gray-100">{debt ? 'Administrar deuda' : 'Nueva deuda'}</h2><p className="truncate text-xs text-gray-400">{debt ? `${debt.label} · Bs ${fmtBs(summary.remainingBs)}` : 'Registra el saldo inicial y su seguimiento.'}</p></div>
+                    <div className="min-w-0 flex-1"><h2 id="debt-form-title" className="truncate text-lg font-bold uppercase tracking-tight text-gray-900 dark:text-gray-100">{debt ? 'Administrar deuda' : 'Nueva deuda'}</h2><p className="truncate text-xs text-gray-400">{debt ? `${debt.label} · Bs ${fmtBs(summary.remainingBs)}` : 'Registra el saldo inicial y su seguimiento.'}</p></div>
                 </div>
 
                 {debt && <div role="tablist" aria-label="Secciones de deuda" className="mt-5 grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800">{tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={mode === tab.id} onClick={() => { setMode(tab.id); setIsAdditive(tab.id === 'payment'); }} className={`touch-feedback min-h-11 rounded-lg px-1 text-[10px] font-black uppercase tracking-wide ${mode === tab.id ? 'bg-white text-[#FF8A3D] shadow-sm dark:text-[#9B7BFF]' : 'text-gray-500 dark:text-gray-400'}`}>{tab.label}</button>)}</div>}

@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import AppHeader from '@/Components/AppHeader';
-import { Head, usePage, router } from '@inertiajs/react';
+import { Head, usePage, router, Link } from '@inertiajs/react';
 import React, { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import axios from 'axios';
 import BalanceCard from '@/Components/Budget/BalanceCard';
@@ -683,11 +683,12 @@ export default function Dashboard() {
                 show={showSettingsModal}
                 onClose={() => setShowSettingsModal(false)}
                 maxWidth="sm"
+                labelledBy="dashboard-settings-title"
             >
                 <div className="max-h-[80dvh] overflow-y-auto p-4 text-gray-700 dark:text-gray-200">
                     <div className="mb-4 flex items-center justify-between">
                         <div>
-                            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Configuración</h2>
+                            <h2 id="dashboard-settings-title" className="text-lg font-bold text-gray-900 dark:text-white">Configuración</h2>
                             {auth?.user && <p className="text-xs text-gray-400">{auth.user.name}</p>}
                         </div>
                         <button onClick={() => setShowSettingsModal(false)} className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-800" aria-label="Cerrar menú">
@@ -699,18 +700,24 @@ export default function Dashboard() {
                         {native?.canRemoteDesktop && <button type="button" onClick={() => { setShowSettingsModal(false); setShowRemoteDesktop(true); }} className="menu-button">Escritorio remoto</button>}
                         <button onClick={() => { setShowSettingsModal(false); seedMockData(); }} className="menu-button">Llenar datos de prueba</button>
                         <div className="my-2 border-t border-gray-200 dark:border-gray-700" />
-                        <a href={route('settings')} className="menu-button">Configuración</a>
+                        {/* Inertia links, not bare <a>. These four all pointed at
+                            Inertia routes, so a tap tore the whole app down and
+                            rebuilt it -- a white flash and a full re-boot for a
+                            navigation. <Link> keeps it client-side, and still
+                            gives a real href, so modified-click and middle-click
+                            open the tab as usual. */}
+                        <Link href={route('settings')} className="menu-button">Configuración</Link>
                         {auth?.user ? (
                             <>
-                                <a href={route('profile.edit')} className="menu-button">Mi perfil</a>
+                                <Link href={route('profile.edit')} className="menu-button">Mi perfil</Link>
                                 <form method="POST" action={route('logout')} onSubmit={(event) => { event.preventDefault(); router.post(route('logout')); }}>
                                     <button type="submit" className="menu-button text-red-600 dark:text-red-400">Cerrar sesión</button>
                                 </form>
                             </>
                         ) : (
                             <>
-                                <a href={route('login')} className="menu-button">Iniciar sesión</a>
-                                <a href={route('register')} className="menu-button">Crear cuenta</a>
+                                <Link href={route('login')} className="menu-button">Iniciar sesión</Link>
+                                <Link href={route('register')} className="menu-button">Crear cuenta</Link>
                             </>
                         )}
                     </div>
@@ -752,13 +759,23 @@ export default function Dashboard() {
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                         className="fixed bottom-6 left-0 right-0 flex justify-center px-4 pointer-events-none z-50"
                     >
-                        <div className="bg-white/80 dark:bg-black/80 backdrop-blur-md border border-white/20 rounded-2xl p-1 shadow-2xl flex gap-1 pointer-events-auto overflow-x-auto max-w-full no-scrollbar">
+                        <div
+                            className="bg-white/80 dark:bg-black/80 backdrop-blur-md border border-white/20 rounded-2xl p-1 shadow-2xl flex gap-1 pointer-events-auto overflow-x-auto max-w-full no-scrollbar"
+                            role="group"
+                            aria-label="Categorías"
+                        >
                             {budget.categories.map(cat => (
                                 <button
                                     key={cat.id}
+                                    type="button"
                                     onClick={() => setSelectedCategoryName(cat.name)}
+                                    /* The selected pill was the only orange one and
+                                       nothing said so. aria-pressed carries the
+                                       selection, and the bar itself is a group
+                                       rather than an unlabelled strip. */
+                                    aria-pressed={selectedCategoryName === cat.name}
                                     className={cn(
-                                        "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap",
+                                        "px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-colors whitespace-nowrap",
                                         selectedCategoryName === cat.name
                                             ? "bg-[#FF8A3D] dark:bg-[#9B7BFF] text-white shadow-md"
                                             : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"

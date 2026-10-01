@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { fmtPct, fmtRate } from '@/lib/money';
 import { useRateLabel } from '@/hooks/useFigure';
+import { isoOfDay } from '@/lib/localDate';
 
 function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -18,8 +19,11 @@ const RANGES = [
 ];
 
 const MONTH_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-
-const TODAY = new Date().toISOString().slice(0, 10);
+// Today's date, as the LOCAL day key from localDate.js. Compared against the
+// server's calendar dates to decide which points are still in the future, so a
+// UTC date would mark today's own reading as future in the evening and draw it
+// dashed with an approximation sign. See localDate.js for the rule.
+const TODAY = isoOfDay(new Date());
 
 const shortDate = (iso) => {
     const d = new Date(`${iso}T12:00:00`);
@@ -34,10 +38,6 @@ const longDate = (iso) => {
 };
 
 /**
- * BCV rate history view (swipe page 1). The series arrives with the
- * backward-carry rule already applied server-side: days with no BCV
- * publication inherit the closest earlier observation and arrive with
- * exact=false (drawn dashed in the chart / marked with ≈ in the list).
  *
  * The series on screen follows the display currency, and `comparison` carries
  * the other one alongside it. Both are bolivares per one unit of their own
@@ -146,10 +146,9 @@ export default function RateHistoryDashboard({
 
                 <div className="relative z-10">
                     <p className="text-4xl font-black font-serif tracking-tight tabular">
-                        {last ? `${rateLabel} ${fmtRate(last.rate)}` : '—'}
-                    </p>
+                        {last ? `${rateLabel} ${fmtRate(last.rate)}` : '≈'}</p>
                     <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest mt-1">
-                        {last ? `Último dato · ${longDate(last.date)}` : (rate?.date_iso ? longDate(rate.date_iso) : '')}
+                        {last ? `Ultimo dato • ${longDate(last.date)}` : (rate?.date_iso ? longDate(rate.date_iso) : '')}
                     </p>
 
                     {/* The other series, only when it was actually fetched. A
@@ -240,13 +239,13 @@ export default function RateHistoryDashboard({
                 </div>
             ) : data.length === 0 ? (
                 <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-6 text-center space-y-3">
-                    <p className="text-sm font-bold text-gray-400">Sin tasas registradas todavía</p>
+                    <p className="text-sm font-bold text-gray-400">Sin tasas registradas todavia</p>
                     <button
                         onClick={handleRefresh}
                         disabled={refreshing}
                         className="text-xs font-black uppercase tracking-widest text-[#FF8A3D] dark:text-[#9B7BFF] disabled:opacity-50"
                     >
-                        {refreshing ? 'Actualizando…' : 'Actualizar desde BCV'}
+                        {refreshing ? 'Actualizando窶ｦ' : 'Actualizar desde BCV'}
                     </button>
                 </div>
             ) : (
@@ -256,8 +255,8 @@ export default function RateHistoryDashboard({
                     {stats && (
                         <div className="grid grid-cols-4 gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
                             {[
-                                ['Mín', fmtRate(stats.min)],
-                                ['Máx', fmtRate(stats.max)],
+                                ['Min', fmtRate(stats.min)],
+                                ['Max', fmtRate(stats.max)],
                                 ['Prom', fmtRate(stats.avg)],
                                 ['Δ', `${stats.pct >= 0 ? '+' : ''}${fmtPct(stats.pct)}%`],
                             ].map(([label, value]) => (
@@ -330,7 +329,7 @@ export default function RateHistoryDashboard({
                                                         : 'text-gray-300 dark:text-gray-600',
                                             )}
                                         >
-                                            {diff === 0 || prev === null ? '—' : `${diff > 0 ? '+' : ''}${fmtRate(diff)}`}
+                                            {diff === 0 || prev === null ? '≈' : `${diff > 0 ? '+' : ''}${fmtRate(diff)}`}
                                         </span>
                                     </div>
                                 </div>
@@ -342,7 +341,7 @@ export default function RateHistoryDashboard({
                             onClick={() => setVisibleRows(visibleRows + 60)}
                             className="w-full mt-3 py-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-[#FF8A3D] dark:hover:text-[#9B7BFF] transition-colors"
                         >
-                            Ver más ({reversed.length - visibleRows})
+                            Ver mas ({reversed.length - visibleRows})
                         </button>
                     )}
                 </div>
@@ -351,7 +350,7 @@ export default function RateHistoryDashboard({
     );
 }
 /**
- * Hand-rolled SVG area chart — no recharts so the initial bundle stays lean.
+ * Hand-rolled SVG area chart 窶・no recharts so the initial bundle stays lean.
  * Carried-forward (non-exact) segments are drawn dashed: the visual honesty
  * of the backward-carry rule.
  *
@@ -536,3 +535,5 @@ function RateChart({ points, comparison = null }) {
         </div>
     );
 }
+
+

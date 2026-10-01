@@ -43,7 +43,7 @@ export function TransportButton({ action, icon: Icon, onClick, busy, className =
             } ${className}`}
         >
             <Icon size={16} />
-            {busy ? 'Abriendo...' : action.label}
+            {busy ? 'Abriendo…' : action.label}
         </button>
     );
 }
@@ -216,7 +216,7 @@ function ImportPastePanel() {
                     onChange={(event) => setData({ json: event.target.value })}
                     rows={4}
                     spellCheck={false}
-                    placeholder='{"format":"bkeeper-backup", ...}'
+                    placeholder='{"format":"bkeeper-backup", …}'
                     className="w-full rounded-lg border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white text-xs font-mono"
                 />
                 <button
@@ -225,7 +225,7 @@ function ImportPastePanel() {
                     disabled={processing || !data.json.trim()}
                     className="w-full py-2 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-400 text-white rounded-lg text-xs font-bold transition-colors"
                 >
-                    {processing ? 'Restaurando...' : 'Restaurar'}
+                    {processing ? 'Restaurando…' : 'Restaurar'}
                 </button>
             </div>
         </details>

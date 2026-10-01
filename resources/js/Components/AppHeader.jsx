@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { router } from '@inertiajs/react';
 import { useCurrency, currencySymbol, setDisplayCurrency, counterpartOf, EUR } from '@/lib/currency';
 import useMenuDismiss from '@/hooks/useMenuDismiss';
 import useTheme from '@/hooks/useTheme';
@@ -101,7 +102,18 @@ export default function AppHeader({
                 {back && (
                     <a
                         href={back.href}
-                        onClick={back.onClick}
+                        onClick={(event) => {
+                            if (back.onClick) return back.onClick(event);
+                            // No caller handler means a bare href, and a bare href
+                            // is a full document load: the SPA unmounts, the app
+                            // re-bootstraps, and the state the user just set up is
+                            // gone. Inertia keeps the page alive. Modified clicks
+                            // are still left to the browser, so open-in-new-tab
+                            // and middle-click behave as they do on any link.
+                            if (event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) return;
+                            event.preventDefault();
+                            router.visit(back.href);
+                        }}
                         className="header-icon-button shrink-0"
                         title={back.label}
                         aria-label={back.label}
@@ -234,8 +246,13 @@ export default function AppHeader({
                                 aria-current={isCurrent ? 'page' : undefined}
                                 className={cn(
                                     'touch-feedback flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-[11px] font-black uppercase tracking-wide',
+                                    /* The active chip is white, and the brand orange on
+                                       white is about 2.5:1 -- unreadable at 11px
+                                       bold. Orange-700 reads at ~4.6:1 on the same
+                                       white and is still visibly the brand. Same
+                                       reasoning for the dark-mode violet on white. */
                                     isCurrent
-                                        ? 'bg-white text-[#FF8A3D] shadow-sm dark:text-[#9B7BFF]'
+                                        ? 'bg-white text-orange-700 shadow-sm dark:text-violet-700'
                                         : 'text-white/80 hover:bg-white/15 hover:text-white',
                                 )}
                             >

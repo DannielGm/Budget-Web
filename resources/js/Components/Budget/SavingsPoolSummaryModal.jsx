@@ -4,7 +4,7 @@ import { ArrowDownToLine, ArrowUpFromLine, Landmark, Wallet, Banknote, ArrowRigh
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { convertBetween, currencySymbol, fmtForeign, potAmount, rateUnitLabel, useCurrency, USD, EUR } from '@/lib/currency';
-import { fmtBs, fmtUsd } from '@/lib/money';
+import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 import { useRateInBs } from '@/hooks/useFigure';
 
 /** The two pots a pool holds, in the order they are stated. */
@@ -47,7 +47,7 @@ export function potFootnote({ pot, displayCurrency, balance, rate, converted }) 
 
     const line = [
         `≈ Bs ${fmtBs(balance * factor)}`,
-        `${factor.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${rateUnitLabel(pot)}`,
+        `${fmtRate(factor)} ${rateUnitLabel(pot)}`,
     ].join(' · ');
 
     // The conversion hangs off the rate instead of becoming a third item, so the
@@ -134,7 +134,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
         : `${POOL_LABELS[pool] || pool} · ${formatDate(t.timestamp)}`);
 
     return (
-        <Modal show={show} onClose={onClose} maxWidth="sm">
+        <Modal show={show} onClose={onClose} maxWidth="sm" labelledBy="savings-pool-title">
             <div className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <div className="flex items-start gap-3 mb-6">
                     <div className="bg-[#1A1A1A] p-2 rounded-xl">
@@ -142,7 +142,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                     </div>
                     <div>
                         <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter leading-none">
+                            <h2 id="savings-pool-title" className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter leading-none">
                                 Estado de Ahorros
                             </h2>
                             <button
@@ -182,7 +182,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                             return (
                                 <div key={pot} className="mb-1 last:mb-0">
                                     <p className="text-2xl font-black font-serif text-gray-900 dark:text-white tracking-tight">
-                                        {currencySymbol(pot)} {balance.toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                        {currencySymbol(pot)} {fmtUsd(balance)}
                                     </p>
                                     {footnote ? (
                                         <p className="mt-0.5 text-xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -239,7 +239,7 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                                             {incoming ? '+' : '-'} {fmtForeign(t.amount_usd, potOf(t))}
                                         </p>
                                         <p className="text-[10px] text-gray-400 font-bold">
-                                            Bs {parseFloat(t.amount_bs || 0).toLocaleString('es-ES', { minimumFractionDigits: 2 })}
+                                            Bs {fmtBs(t.amount_bs || 0)}
                                         </p>
                                     </div>
                                 </div>

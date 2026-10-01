@@ -10,13 +10,19 @@ import { useForm, router } from '@inertiajs/react';
 import { Trash2 } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
 import { useRateLabel, useTodayRateInBs } from '@/hooks/useFigure';
+import { fmtBs } from '@/lib/money';
 import { currencySymbol, useCurrency, USD, EUR } from '@/lib/currency';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 
 /** The two pots a deposit can land in, in the order they are offered. */
 const POT_CHOICES = [USD, EUR];
 
+/* The active pot was brand orange on bg-orange-50: about 2.4:1, and it is the
+   control that says which currency the amount below is in. Orange-700 on the
+   same tint is ~4.4:1; the border and the dark-mode violet keep the brand
+   colour, which only have to be distinguishable rather than readable. */
 const potButton = (active) => `rounded-xl border-2 px-3 py-2 text-sm font-bold transition-colors ${active
-    ? 'border-[#FF8A3D] bg-orange-50 text-[#FF8A3D] dark:border-[#9B7BFF] dark:bg-purple-950/40 dark:text-[#9B7BFF]'
+    ? 'border-[#FF8A3D] bg-orange-50 text-orange-700 dark:border-[#9B7BFF] dark:bg-purple-950/40 dark:text-purple-300'
     : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'}`;
 
 export default function SavingsForm({ show, onClose, transaction = null, monthId,
@@ -123,8 +129,10 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
     };
 
 
+    const isDirty = useFormDirty(data, show);
+
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId} labelledBy="savings-form-title" dirty={isDirty}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <div className="flex items-center gap-3 mb-4">
                     {transaction && (
@@ -137,7 +145,7 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                             <Trash2 size={18} />
                         </button>
                     )}
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
+                    <h2 id="savings-form-title" className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
                         {transaction ? 'Editar Ahorro' : 'Nuevo Ahorro'}
                     </h2>
                 </div>
@@ -228,8 +236,10 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                     </div>
 
                     <div>
-                        <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
-                            Equivalente: Bs {data.amount_usd && data.exchange_rate ? (parseFloat(data.amount_usd) * parseFloat(data.exchange_rate)).toLocaleString('es-ES') : '0.00'}
+                        <p className="text-xs text-gray-500 font-bold dark:text-gray-400">
+                            {data.amount_usd && data.exchange_rate
+                                ? `Equivalente: Bs ${fmtBs(Number(data.amount_usd) * Number(data.exchange_rate))}`
+                                : 'Equivalente: Bs 0,00'}
                         </p>
                     </div>
                 </div>
@@ -239,7 +249,7 @@ export default function SavingsForm({ show, onClose, transaction = null, monthId
                         Cancelar
                     </SecondaryButton>
                     <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                        {transaction ? 'Actualizar' : 'Guardar'}
+                        {processing ? 'Guardando…' : (transaction ? 'Actualizar' : 'Guardar')}
                     </PrimaryButton>
                 </div>
             </form>

@@ -9,6 +9,7 @@ import SecondaryButton from '@/Components/SecondaryButton';
 import BudgetCalendar from '@/Components/Budget/BudgetCalendar';
 import { useForm } from '@inertiajs/react';
 import { useCurrency, EUR } from '@/lib/currency';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import axios from 'axios';
 import { clsx } from 'clsx';
@@ -131,16 +132,16 @@ export default function BudgetForm({ show, onClose, budget, rates = {},
         });
     };
 
-    const handleClose = () => {
-        clearErrors();
-        onClose();
-    };
+    // The Cancelar button is the deliberate exit and is allowed to discard
+    // without asking -- the guard is for the accidental ones.
+    const isDirty = useFormDirty(data, show);
+    const handleClose = () => { clearErrors(); onClose(); };
 
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId} labelledBy="budget-form-title" dirty={isDirty}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                   <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
+                      <h2 id="budget-form-title" className="text-lg font-bold text-gray-900 dark:text-gray-100 uppercase tracking-tight">
                           Configuración de {budget.month_label}
                       </h2>
                       <label className="flex cursor-pointer items-center gap-2.5 rounded-lg border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 px-3 py-2 select-none">
@@ -182,7 +183,7 @@ export default function BudgetForm({ show, onClose, budget, rates = {},
                             <FormattedNumberInput
                                 id="additiveAmount"
                                 name="additiveAmount"
-                                placeholder="Monto a sumar"
+                                placeholder="Monto a sumar…"
                                 value={additiveAmount}
                                 className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                                 onChange={(e) => setAdditiveAmount(e.target.value)}
@@ -247,7 +248,7 @@ export default function BudgetForm({ show, onClose, budget, rates = {},
                         Cancelar
                     </SecondaryButton>
                     <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                        Guardar
+                        {processing ? 'Guardando…' : 'Guardar'}
                     </PrimaryButton>
                 </div>
             </form>

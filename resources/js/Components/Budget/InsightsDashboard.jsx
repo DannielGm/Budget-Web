@@ -285,9 +285,18 @@ function DebtSection({ d, rate }) {
                 </div>
             ) : null}
 
-            {d.debts.length === 0
+                {d.creditBs > 0 && (
+                    <div className="mb-2 rounded-lg bg-gray-50 px-2.5 py-1.5 dark:bg-gray-800/60">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Compras a crédito sin asignar</p>
+                        <p className="text-xs font-bold tabular text-gray-700 dark:text-gray-200">Bs {fmtBs(d.creditBs, 0)}</p>
+                    </div>
+                )}
+
+
+                {d.debts.length === 0 && d.creditBs <= 0
                 ? <EmptyNote>Sin deudas registradas</EmptyNote>
                 : (
+
                     <ul className="flex flex-wrap gap-1.5">
                         {d.debts.map(({ debt, remainingBs, paidPercentage }) => (
                             <li

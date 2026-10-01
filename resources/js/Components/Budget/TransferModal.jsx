@@ -11,12 +11,17 @@ import { ArrowDownToLine, ArrowUpFromLine, Trash2 } from 'lucide-react';
 import { useConfirm } from '@/Components/ConfirmationProvider';
 import { useRateLabel } from '@/hooks/useFigure';
 import { currencySymbol, useCurrency, USD, EUR } from '@/lib/currency';
+import { fmtBs, fmtRate } from '@/lib/money';
+import { useFormDirty } from '@/hooks/useDismissOnBackButton';
 
 /** The two pots a transfer can move money in or out of. */
 const POT_CHOICES = [USD, EUR];
 
+/* Same helper as SavingsForm -- the two forms show the same pot selector, and
+   two copies of this string is how they drift apart. See SavingsForm for why
+   the active colour is orange-700 rather than the brand orange. */
 const potButton = (active) => `rounded-xl border-2 px-3 py-2 text-sm font-bold transition-colors ${active
-    ? 'border-[#FF8A3D] bg-orange-50 text-[#FF8A3D] dark:border-[#9B7BFF] dark:bg-purple-950/40 dark:text-[#9B7BFF]'
+    ? 'border-[#FF8A3D] bg-orange-50 text-orange-700 dark:border-[#9B7BFF] dark:bg-purple-950/40 dark:text-purple-300'
     : 'border-gray-200 text-gray-500 hover:border-gray-300 dark:border-gray-700 dark:text-gray-400'}`;
 
 const POOL_LABELS = { Digital: 'Digital', Bank: 'Banco', Physical: 'Físico' };
@@ -201,8 +206,10 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
             ? (isDeposit ? 'Nuevo Depósito' : 'Nuevo Retiro')
             : (isDeposit ? 'Nuevo Depósito' : 'Nuevo Retiro');
 
+    const isDirty = useFormDirty(data, show);
+
     return (
-        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId}>
+        <Modal show={show} onClose={handleClose} maxWidth="md" layoutId={layoutId} labelledBy="transfer-modal-title" dirty={isDirty}>
             <form onSubmit={submit} className="p-6 bg-white dark:bg-gray-900 transition-colors">
                 <div className="flex items-center gap-2 mb-6">
                     {isEditing && (
@@ -221,7 +228,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                     >
                         {isDeposit ? <ArrowDownToLine size={24} /> : <ArrowUpFromLine size={24} />}
                     </div>
-                    <h2 className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter">
+                    <h2 id="transfer-modal-title" className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tighter">
                         {title}
                     </h2>
                     {isPoolMode && (
@@ -392,7 +399,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         <div>
                             <p className="text-xs text-gray-400 font-bold dark:text-gray-500">
                                 {derivedRate
-                                    ? `Equivalente: Bs ${parseFloat(data.amount_bs).toLocaleString('es-ES', { minimumFractionDigits: 2 })} @ ${derivedRate.toLocaleString('es-ES', { minimumFractionDigits: 2 })} ${rateLabel}`
+                                    ? `Equivalente: Bs ${fmtBs(data.amount_bs)} @ ${fmtRate(derivedRate)} ${rateLabel}`
                                     : 'Equivalente: ingresa ambos montos para ver la tasa efectiva'}
                             </p>
                         </div>
@@ -404,7 +411,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                             id="note"
                             type="text"
                             value={data.note}
-                            placeholder="Ej: Compra de divisas, Retiro para gastos"
+                            placeholder="Ej.: compra de divisas, retiro para gastos…"
                             className="mt-1 block w-full dark:bg-gray-800 dark:text-white dark:border-gray-700"
                             onChange={(e) => setData('note', e.target.value)}
                         />
@@ -417,7 +424,7 @@ export default function TransferModal({ show, onClose, monthId, transfer = null,
                         Cancelar
                     </SecondaryButton>
                     <PrimaryButton className="w-full sm:w-auto justify-center bg-[#FF8A3D] dark:bg-[#9B7BFF] hover:opacity-90 transition-opacity" disabled={processing}>
-                        {isEditing ? 'Guardar' : (isDeposit ? 'Depositar' : 'Retirar')}
+                        {processing ? 'Guardando…' : (isEditing ? 'Guardar' : (isDeposit ? 'Depositar' : 'Retirar'))}
                     </PrimaryButton>
                 </div>
             </form>

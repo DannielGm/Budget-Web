@@ -61,12 +61,12 @@ export default function RemoteDesktopPanel({ show, onClose }) {
 
 
     return (
-        <Modal show={show} onClose={onClose} maxWidth="sm">
+        <Modal show={show} onClose={onClose} maxWidth="sm" labelledBy="remote-desktop-title">
             <div className="p-5 bg-white dark:bg-gray-900">
                 <div className="flex items-start gap-3">
                     <div className="p-2.5 rounded-xl bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-300"><MonitorSmartphone size={24} /></div>
                     <div className="min-w-0 flex-1">
-                        <h2 className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Escritorio remoto</h2>
+                        <h2 id="remote-desktop-title" className="text-lg font-black uppercase tracking-tight text-gray-900 dark:text-white">Escritorio remoto</h2>
                         <p className="mt-1 text-xs leading-5 text-gray-500 dark:text-gray-400">Edita los mismos datos desde una computadora en la misma red Wi-Fi.</p>
                     </div>
                 </div>
@@ -93,7 +93,16 @@ export default function RemoteDesktopPanel({ show, onClose }) {
 function ActiveConnection({ status, minutes, secs, copied, busy, copy, stop }) {
     return (
         <div className="mt-6 space-y-4">
-            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Activo · {minutes}:{secs}</div>
+            {/* The only confirmation a copy used to give was a tick icon
+                changing colour, which is not something a screen reader can
+                report. One polite live region, announced after the icon
+                changes, so the value being copied is confirmed either way. */}
+            <p role="status" aria-live="polite" className="sr-only">
+                {copied === 'url' ? 'Dirección copiada al portapapeles.'
+                    : copied === 'token' ? 'Código temporal copiado al portapapeles.'
+                        : ''}
+            </p>
+            <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 px-3 py-2 text-xs font-bold text-emerald-700 dark:text-emerald-300"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" /> Activo · {minutes}:{secs}</div>
             <div><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Dirección</p><button type="button" onClick={() => copy(status.url, 'url')} className="mt-1 flex min-h-11 w-full items-center justify-between rounded-xl bg-gray-50 dark:bg-gray-800 px-3 text-left"><span className="truncate text-sm font-bold text-gray-800 dark:text-gray-100">{status.url}</span>{copied === 'url' ? <Check size={17} className="text-emerald-500" /> : <Copy size={17} className="text-gray-400" />}</button></div>
             <div><p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Código temporal</p><button type="button" onClick={() => copy(status.token, 'token')} className="mt-1 flex min-h-12 w-full items-center justify-between rounded-xl bg-gray-950 dark:bg-black px-4"><span className="font-mono text-lg font-black tracking-[0.2em] text-white">{status.token}</span>{copied === 'token' ? <Check size={18} className="text-emerald-400" /> : <Copy size={18} className="text-white/50" />}</button></div>
             <div className="flex gap-2 text-xs text-gray-500 dark:text-gray-400"><Wifi size={16} /> La computadora y el teléfono deben estar en la misma red.</div>

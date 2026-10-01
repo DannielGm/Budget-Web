@@ -1,7 +1,10 @@
-import { scopeMonth } from '@/lib/scopedMoney';
+﻿import { scopeMonth } from '@/lib/scopedMoney';
+import { isoOfTimestamp } from '@/lib/localDate';
 
 const n = (value) => Number(value) || 0;
-const keyOf = (value) => { const d = new Date(value); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+// The one local day key. See localDate.js -- this line was a third copy of it, and
+// the local-vs-UTC distinction is the whole content of the function.
+const keyOf = isoOfTimestamp;
 const atStart = (value) => { const d = new Date(value); d.setHours(0, 0, 0, 0); return d.getTime(); };
 const atEnd = (value) => { const d = new Date(value); d.setHours(23, 59, 59, 999); return d.getTime(); };
 
@@ -115,4 +118,5 @@ export function buildGraphSeries({ budget, categories = [], rangeMode = 'Mes', d
         hasEvents: events.some((event) => event.timestamp >= from && event.timestamp <= to),
     };
 }
+
 

@@ -48,9 +48,6 @@ export default function BalanceCard({
 
     return (
         <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#1A1A2E] to-[#16213E] px-4 py-5 text-white shadow-xl">
-            <div className="absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/5" />
-            <div className="absolute -right-2 top-16 h-20 w-20 rounded-full bg-white/5" />
-
             <div className="relative z-10 mb-3">
                 <div className="min-w-0">
                     <span className="block text-sm font-medium uppercase tracking-widest text-white/80">
@@ -63,13 +60,16 @@ export default function BalanceCard({
             </div>
 
             <div className="relative z-10 mb-4">
-                <h1
+                {/* Not an <h1>: the page header already renders the screen's only
+                    one. A second one made the dashboard announce two page
+                    titles, and this number is a figure, not a heading. */}
+                <p
                     ref={bsRef}
                     style={{ fontSize: `${bsSize}px` }}
                     className="whitespace-nowrap text-5xl font-black font-serif tracking-tight tabular text-white"
                 >
                     Bs {fmtBs(balanceBs)}
-                </h1>
+                </p>
                 <div className="mt-3 flex items-center justify-between gap-3">
                     <p
                         ref={usdRef}
