@@ -11,7 +11,6 @@
         "inertiajs/inertia-laravel": "^2.0",
         "laravel/framework": "^13.17",
         "laravel/sanctum": "^4.0",
-        "laravel/tinker": "^3.0",
         "nativephp/mobile": "^4.5",
         "nativephp/mobile-share": "1.0",
         "smronju/nativephp-document-picker": "1.1",
@@ -25,6 +24,7 @@
         "laravel/pail": "^1.2.5",
         "laravel/pao": "^1.0.6",
         "laravel/pint": "^1.27",
+        "laravel/tinker": "^3.0",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
         "phpunit/phpunit": "^12.5.12"

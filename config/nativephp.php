@@ -251,6 +251,21 @@ return [
         'storage/framework/cache',
         'storage/framework/testing',
         'storage/logs/laravel.log',
+
+        /*
+        | Build inputs, not runtime files. NativePHP's installer reads these once
+        | out of public/ to generate the native Android drawables, and it does so
+        | BEFORE this bundle is assembled. Nothing in the running app asks for
+        | them: app.blade.php carries no favicon, icon or splash link, and no
+        | compiled JS names either file. They were shipping twice -- once in the
+        | bundle and once as generated res/drawables -- for ~7.4 MB of the APK.
+        */
+        'public/splash.png',
+        'public/icon.png',
+
+        // Source artwork and design exports, not app assets. Referenced by no
+        // part of the build (the installer looks in public/, never here).
+        'Icons',
     ],
 
     /*
