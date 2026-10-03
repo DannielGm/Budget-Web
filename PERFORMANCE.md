@@ -7,17 +7,29 @@ Every number below was measured from the actual artifact, not copied from vendor
 docs. Re-run the audit commands at the end after each track to confirm the win
 landed.
 
-## Results (measured after Track A, 2026-10-03)
+## Results (final, measured 2026-10-03)
 
-`app-release.apk`: **70.44 MB -> 38.72 MB** = **-31.72 MB (-45%)**.
+`app-release.apk`: **70.44 MB -> 28.75 MB** = **-41.69 MB (-59%)**.
 
-| Region | Before | After | Delta | Step |
-|---|---|---|---|---|
-| `classes*.dex` | 32.67 MB (4 files) | **6.47 MB (1 file)** | **-26.20 MB** | A1 R8 |
-| `assets/laravel_bundle.zip` | 22.09 MB | **17.36 MB** | **-4.73 MB** | A4 logcat |
-| `resources.arsc` | 1.33 MB | **0.69 MB** | -0.64 MB | A2 shrink |
-| `res/*.png` | ~4.6 MB | ~4.4 MB | ~-0.2 MB | A2 shrink |
-| `lib/arm64-v8a` | 8.85 MB | 8.85 MB | **0.00 MB** | A3 **did not work** |
+| Stage | APK | Delta |
+|---|---|---|
+| Baseline | 70.44 MB | — |
+| After Track A | 38.72 MB | -31.72 MB |
+| After Track B | **28.75 MB** | -9.97 MB |
+
+Region by region, original -> now:
+
+| Region | Before | After | Win |
+|---|---|---|---|
+| `classes*.dex` | 32.67 MB (4 files) | **6.47 MB (1 file)** | -26.20 MB (R8) |
+| `assets/laravel_bundle.zip` | 22.09 MB | **7.39 MB** | -14.70 MB |
+| `resources.arsc` | 1.33 MB | 0.69 MB | -0.64 MB |
+| `res/*.png` | ~4.6 MB | ~4.4 MB | -0.2 MB |
+| `lib/arm64-v8a` | 8.85 MB | 8.85 MB | **0** (A3 blocked) |
+
+Track A alone accounted for -31.72 MB and Track B for -9.97 MB.
+
+### Track A result (measured)
 
 R8 also collapsed four dex files into one, which is why the saving beat the
 estimate. Two things did **not** go to plan:
@@ -271,34 +283,75 @@ Removes ~24 MB of dex that ART otherwise has to load, and the build file's own
 comment attributes ~90 ms of the cold-start `bindApplication` time to it. This
 is the main measured startup win, and it is already paid for by Track A.
 
-### C2. App-specific baseline profile
+### C2. App-specific baseline profile — device work, not a config flag
 
-`app/src/main/baseline-prof.txt` already exists (13,579 lines, 1.35 MB) but it
-is the AGP-merged Compose/activity profile — it does not describe this app's own
-WebView -> PHP -> Inertia -> React startup path. The `profileable` build type
-and `android:profileable` exist specifically to generate one:
+`app/src/main/baseline-prof.txt` exists (13,579 lines) and ships as
+`assets/dexopt/baseline.prof` in the APK, but it is the AGP-merged
+Compose/activity profile. It says nothing about this app's own
+WebView -> PHP -> Inertia -> React startup path.
 
-1. `php artisan native:run android --build=profileable`
-2. Capture startup with Macrobenchmark or simpleperf.
-3. Commit the generated profile, then rebuild release.
+Be clear about the cost here: the `profileable` build type only sets
+`isProfileable = true`, which lets a profiler *attach*. It does not generate a
+profile. Producing one needs a real device plus a Macrobenchmark module added to
+the Gradle project, then extracting hot methods back into
+`baseline-prof.txt`. That is a genuine project, not a flag.
 
-### C3. Boot-path JavaScript
+### C3. Boot-path JavaScript — investigated, no win available
 
-Total built JS is 1,188 KB. The boot-path chunks are `app` at 241.4 KB
-(includes framer-motion), `react-dom` at 129.5 KB, and
-`useDismissOnBackButton` at 121.7 KB. That last one is on the critical path via
-`useMenuDismiss` -> `AppHeader` -> layouts, and 121.7 KB for a back-button hook
-is worth inspecting with a bundle analyzer before optimising anything else —
-profile the chunk before assuming what is in it.
+Total built JS is 1,188 KB. The suspicious chunk was
+`useDismissOnBackButton` at 121.7 KB: 121.7 KB for a back-button hook does not
+add up, and it sits on the critical path via `useMenuDismiss` -> `AppHeader` ->
+layouts.
+
+**It is a misnamed chunk, and the weight is framer-motion.** Fingerprinting the
+built file: `layoutId` x18, `presenceContext` x13, `motion` x18,
+`dragConstraints` x7, `whileTap` x7 — all framer-motion internals. The `app`
+chunk has almost none of it (`layoutId` x2). Rollup named the shared chunk after
+one of its modules.
+
+So there is nothing to optimise: `app.jsx` wraps the entire tree in
+`<MotionConfig reducedMotion="user">`, which is what makes the app's OS-level
+reduced-motion setting cover modals, shared-layout morphs and page transitions.
+Deferring it would mean remounting the tree, and it is needed *before* first
+paint to avoid a motion flash. Leave it.
 
 `BudgetGraph` (349.8 KB, recharts) is correctly behind `lazy()` in
-`Dashboard.jsx` and is **not** on the boot path. Leave it alone.
+`Dashboard.jsx` and is **not** on the boot path.
 
 ### C4. First-launch extraction
 
-The bundle holds 8,447 entries that get unzipped into app storage on first boot.
-Track A4 and Track B shrink the largest ones and B3 reduces the entry count.
-Measure first-launch time before and after rather than assuming the effect.
+The bundle went 8,447 -> 7,702 entries across Tracks A and B. Fewer files to
+unzip on first boot, but the count barely moved and the win is small. Measure
+before spending effort here.
+
+### C5. OPcache — the open question worth an hour
+
+The bundled PHP reports `#define COMPILE_DL_OPCACHE 1`, i.e. opcache is built as
+a **dynamic** module. If nothing loads it, PHP re-compiles every source file on
+every request, and that dwarfs every other PHP-side lever. It is also the one
+thing that cannot be answered from the build machine: the binary ships static
+libraries (`libphp.a`) that CMake links into `libphp_wrapper.so`, and there are
+no loadable extension `.so`s and no `php.ini` in the bundle.
+
+**The app already answers this for you.** The on-device bootstrap logs a
+breakdown on every request:
+
+```
+PerfTiming: PHP opcache=enabled=YES/NO,cached=N autoload=..ms bootstrap=..ms
+            kernel=..ms capture=..ms kernel_boot=..ms handle=..ms terminate=..ms TOTAL=..ms
+```
+
+It also returns the same data as an `X-PHP-Timing` response header. Read it
+with:
+
+```powershell
+adb logcat -s php | Select-String 'PerfTiming'
+adb shell am start -W -n com.bkeeper.budgettracker/.MainActivity
+```
+
+If that line reads `opcache=disabled` or `opcache=NOT_AVAILABLE`, enabling it is
+the biggest remaining startup win by a wide margin, and it is worth finding out
+before spending time on anything else in this track.
 
 ---
 
@@ -322,15 +375,26 @@ Measure first-launch time before and after rather than assuming the effect.
 
 ---
 
-## Suggested order and checkpoints
+## What is left
 
-1. **A4 + A1 + A2 + A3** together — one `.env` edit plus one deletion. Rebuild
-   and measure. Expect roughly 70 MB -> ~30 MB. This is most of the win for
-   almost no risk.
-2. **B1, B2, B3.** Rebuild and measure. Expect a further ~8 MB and a smaller,
-   faster-to-extract bundle.
-3. **C2, C3.** Measure cold start before and after, do not assume.
-4. **Track D** — leave alone unless the native-first rewrite is separately
+Done and measured: **A1, A2, A4** (all of Track A's working steps) and
+**B1, B2, B3** (all of Track B). Tracks C1 and C3 are resolved — C1 by way of
+R8, C3 by finding there is nothing to win.
+
+Remaining, roughly by value:
+
+1. **C5 — check whether OPcache is live on the device.** One `adb logcat` line
+   decides it, and if it is off it dwarfs everything else left. Do this first.
+2. **A3 — remove `keepDebugSymbols.add("**/*.so")`** from the generated
+   `build.gradle.kts`. Worth ~8 MB of the 8.85 MB still sitting in
+   `lib/arm64-v8a`, which is now the single largest region left in the APK.
+3. **`res/AE.png` + `res/9X.png` (3.34 MB).** Needs a lossy decision — see B1.
+4. **C2 — a real baseline profile.** Device plus a Macrobenchmark module. Only
+   worth it once C5 is answered.
+5. **Device boot test.** Every APK since Track A has had R8 enabled for the
+   first time, and R8 failures appear as a crash on launch, never as a failing
+   test. This is the one unverified risk in the whole plan.
+6. **Track D** — leave alone unless the native-first rewrite is separately
    approved.
 
 ## Audit commands
