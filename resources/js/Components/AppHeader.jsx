@@ -13,6 +13,7 @@ import { twMerge } from 'tailwind-merge';
 import { router } from '@inertiajs/react';
 import { useCurrency, currencySymbol, setDisplayCurrency, counterpartOf, EUR } from '@/lib/currency';
 import useMenuDismiss from '@/hooks/useMenuDismiss';
+import { remeasureFitText } from '@/hooks/useFitText';
 import useTheme from '@/hooks/useTheme';
 
 function cn(...inputs) {
@@ -62,6 +63,14 @@ export default function AppHeader({
     const triggerRef = useRef(null);
     const menuRef = useMenuDismiss(menuOpen, (restoreFocus) => {
         setMenuOpen(false);
+        // Closing this menu can leave every fitted figure on the screen sized
+        // for a width it no longer has, and nothing resizes, so useFitText never
+        // hears about it. This is the one dismiss path -- tap-away, Escape and the
+        // Android back gesture all arrive here -- so it is the one place that has
+        // to say so. Re-measuring rather than reloading: the figures are already
+        // correct, only their size is stale, and a refetch would be a network
+        // round trip for a layout that has already settled.
+        remeasureFitText();
         if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
     });
 

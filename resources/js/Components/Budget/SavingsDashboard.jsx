@@ -114,6 +114,13 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
     // the size was fixed and nothing measured it.
     const [totalRef, totalSize] = useFitText({ min: 30, max: 48, emergencyMin: 22 });
 
+    // "Historial de Movimientos" was `truncate`, which cut the heading off
+    // mid-word on a narrow phone. A heading is the one line on a card that must
+    // never be abbreviated, so it is sized to fit instead -- the same hook every
+    // figure here already uses, floored at 12px so it stays legible rather than
+    // shrinking to nothing on the smallest screen.
+    const [histRef, histSize] = useFitText({ min: 12, max: 18 });
+
     return (
         <div className="space-y-6">
             <div className="bg-gradient-to-br from-[#1A1A2E] to-[#16213E] rounded-2xl p-6 text-white shadow-xl relative overflow-hidden">
@@ -169,7 +176,11 @@ export default function SavingsDashboard({ budget, savingsLedger = [], dateFilte
             <div className="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 rounded-2xl p-4 transition-colors">
                 <div className="mb-4 flex min-w-0 items-center gap-2">
                     <History size={18} className="shrink-0 text-gray-400" />
-                    <h4 className="truncate whitespace-nowrap text-lg font-bold uppercase tracking-wide text-gray-900 dark:text-white">
+                    <h4
+                        ref={histRef}
+                        style={{ fontSize: `${histSize}px` }}
+                        className="truncate whitespace-nowrap font-bold uppercase tracking-wide text-gray-900 dark:text-white"
+                    >
                         Historial de Movimientos
                     </h4>
                 </div>

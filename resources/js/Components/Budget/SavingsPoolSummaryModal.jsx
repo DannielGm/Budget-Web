@@ -6,6 +6,7 @@ import { twMerge } from 'tailwind-merge';
 import { convertBetween, currencySymbol, fmtForeign, potAmount, rateUnitLabel, useCurrency, USD, EUR } from '@/lib/currency';
 import { fmtBs, fmtUsd, fmtRate } from '@/lib/money';
 import { useRateInBs } from '@/hooks/useFigure';
+import useFitText from '@/hooks/useFitText';
 
 /** The two pots a pool holds, in the order they are stated. */
 const POTS = [USD, EUR];
@@ -95,6 +96,10 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
     const eurRate = useRateInBs(EUR);
     const rates = { usdRate, eurRate };
     const Icon = POOL_ICONS[pool] || Wallet;
+
+    // The same heading as the savings screen above, and the same truncation: a
+    // title that loses its last word is worse than a slightly smaller one.
+    const [histRef, histSize] = useFitText({ min: 9, max: 12 });
 
     // Movements of this pool only, latest first (the ledger is already sorted).
     const movements = (savingsLedger || []).filter((t) => (t.kind === 'transaction'
@@ -196,7 +201,11 @@ export default function SavingsPoolSummaryModal({ show, onClose, pool, pools = [
                 </div>
 
                 <div className="mb-4">
-                    <h3 className="truncate whitespace-nowrap text-xs font-black uppercase tracking-widest text-gray-900 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 pb-2">
+                    <h3
+                        ref={histRef}
+                        style={{ fontSize: `${histSize}px` }}
+                        className="truncate whitespace-nowrap font-black uppercase tracking-widest text-gray-900 dark:text-gray-300 border-b border-gray-100 dark:border-gray-800 pb-2"
+                    >
                         Historial de Movimientos
                     </h3>
                 </div>

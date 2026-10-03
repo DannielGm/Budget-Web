@@ -1,6 +1,26 @@
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
 /**
+ * The signal that says "measure again, the width you chose for is stale".
+ *
+ * A fit-text figure is sized once and then only re-sized when it or its parent
+ * actually resizes. A floating menu opening and closing can change what a figure
+ * should be sized for without either element resizing, and nothing about it is a
+ * resize event -- so the figure keeps a size picked for a layout that has moved
+ * on. One window event covers that for every fitted figure on screen, rather than
+ * each caller growing its own listener.
+ */
+export const REMEASURE_EVENT = 'budget:remeasure';
+
+/** Ask every fitted figure to measure itself again. */
+export function remeasureFitText() {
+    if (typeof window === 'undefined') return;
+    // On the next frame, not this one: the close is a state change, and measuring
+    // before React has committed it would measure the layout being left behind.
+    window.requestAnimationFrame(() => window.dispatchEvent(new Event(REMEASURE_EVENT)));
+}
+
+/**
  * Shrink-to-fit text sizing.
  *
  * Finds the largest font size in [min, max] at which the element still fits
@@ -85,6 +105,12 @@ export default function useFitText({ min = 11, max = 32, step = 0.5, emergencyMi
         observer.observe(el);
         if (el.parentElement) observer.observe(el.parentElement);
 
+        // The app asks for a re-measure directly when a layout moved without
+        // resizing anything this observer watches. Placed inside the same effect
+        // so there is one place that answers "re-size me" for a fitted figure,
+        // and one cleanup that takes it all down again.
+        window.addEventListener(REMEASURE_EVENT, measure);
+
         // A webfont swapping in changes the glyph widths, so the size chosen
         // against the fallback face is no longer the best fit. Re-measure
         // once the real font is ready.
@@ -98,6 +124,7 @@ export default function useFitText({ min = 11, max = 32, step = 0.5, emergencyMi
         return () => {
             cancelled = true;
             observer.disconnect();
+            window.removeEventListener(REMEASURE_EVENT, measure);
         };
     }, [measure]);
 
